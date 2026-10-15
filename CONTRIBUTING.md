@@ -14,10 +14,8 @@ Thank you for your interest in contributing to this project!
 ## Coding Standards
 
 - All public members must have XML documentation comments
-- Use `System.Text.Json` and do not introduce `Newtonsoft.Json`
-- The core library has no database dependency; storage backends live in their own packages
-- Fingerprint extraction must stay deterministic: same input, same hashes, on any machine
-- Test audio is synthetic only. Never commit recordings, broadcast audio or real fingerprint data
+- Use `System.Text.Json` — do not introduce `Newtonsoft.Json`
+- Use Refit for HTTP client interfaces
 - Use file-scoped namespaces
 - Use the `required` keyword for DTO properties where appropriate
 - Ensure `TreatWarningsAsErrors` remains enabled

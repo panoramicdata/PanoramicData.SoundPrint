@@ -5,6 +5,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<OutputType>Exe</OutputType>
 		<IsPackable>false</IsPackable>
+		<NeutralResourcesLanguage>en</NeutralResourcesLanguage>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 	</PropertyGroup>
 
