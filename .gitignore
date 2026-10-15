@@ -426,3 +426,9 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# SoundPrint: local experiments and audio (never commit recordings or fingerprint data)
+/temp/
+/benchmarks/audio/
+*.snupkg
+coverage.cobertura.xml
