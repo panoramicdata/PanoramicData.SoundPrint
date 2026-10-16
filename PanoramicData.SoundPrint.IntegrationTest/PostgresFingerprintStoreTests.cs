@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using PanoramicData.SoundPrint.Postgres;
 using PanoramicData.SoundPrint.TestAudio;
@@ -33,6 +35,21 @@ public class PostgresFingerprintStoreTests(PostgresFixture fixture) : IClassFixt
 		await store.InitializeAsync(Ct);
 		(await CountRowsAsync(connectionString, "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('tracks','fingerprints','store_info')")).Should().Be(3);
 		(await CountRowsAsync(connectionString, "SELECT count(*) FROM store_info")).Should().Be(1);
+	}
+
+	[Fact]
+	public async Task Migrations_CanBeRevertedAndReapplied()
+	{
+		var (store, connectionString) = await fixture.CreateStoreAsync();
+		var factory = new TestFactory(SoundPrintDbContext.CreateOptions(connectionString));
+		await using (var context = factory.CreateDbContext())
+		{
+			await context.GetService<IMigrator>().MigrateAsync("0", Ct);
+		}
+
+		(await CountRowsAsync(connectionString, "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('tracks','fingerprints','store_info')")).Should().Be(0);
+		await store.InitializeAsync(Ct);
+		(await store.CountTracksAsync(Ct)).Should().Be(0);
 	}
 
 	[Fact]

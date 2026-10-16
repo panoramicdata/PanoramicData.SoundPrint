@@ -57,7 +57,9 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Build tests
-      run: dotnet build PanoramicData.SoundPrint.Test/PanoramicData.SoundPrint.Test.csproj --configuration Debug
+      run: |
+        dotnet build PanoramicData.SoundPrint.Test/PanoramicData.SoundPrint.Test.csproj --configuration Debug
+        dotnet build PanoramicData.SoundPrint.IntegrationTest/PanoramicData.SoundPrint.IntegrationTest.csproj --configuration Debug
 
     # Microsoft.Testing.Extensions.CodeCoverage 18.12 does not resolve a relative --coverage-settings path
     # against the working directory, so pass it absolute.
@@ -69,13 +71,22 @@ jobs:
         --coverage-output-format cobertura
         --coverage-output coverage.cobertura.xml
 
+    # The PostgreSQL integration tests start a postgres container, which the ubuntu runner provides through Docker.
+    - name: Run integration tests with coverage
+      run: >-
+        ./PanoramicData.SoundPrint.IntegrationTest/bin/Debug/net10.0/PanoramicData.SoundPrint.IntegrationTest
+        --coverage
+        --coverage-settings ${{ github.workspace }}/coverage.config
+        --coverage-output-format cobertura
+        --coverage-output coverage.cobertura.xml
+
     - name: Upload coverage to Codacy
       if: github.event_name == 'push'
       continue-on-error: true
       uses: codacy/codacy-coverage-reporter-action@v1
       with:
         project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-        coverage-reports: PanoramicData.SoundPrint.Test/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
+        coverage-reports: PanoramicData.SoundPrint.Test/bin/Debug/net10.0/TestResults/coverage.cobertura.xml,PanoramicData.SoundPrint.IntegrationTest/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
 
     - name: Upload coverage artifact
       if: always()
@@ -83,7 +94,9 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: coverage
-        path: PanoramicData.SoundPrint.Test/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
+        path: |
+          PanoramicData.SoundPrint.Test/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
+          PanoramicData.SoundPrint.IntegrationTest/bin/Debug/net10.0/TestResults/coverage.cobertura.xml
         retention-days: 7
 
   publish:
