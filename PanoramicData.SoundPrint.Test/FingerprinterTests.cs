@@ -347,6 +347,15 @@ public class FingerprinterTests
 	}
 
 	[Fact]
+	public void NullOptions_AreRejected()
+	{
+		var construct = () => new Fingerprinter(8000, null!);
+		construct.Should().Throw<ArgumentNullException>();
+		var oneShot = () => Fingerprinter.Fingerprint(new float[10], 8000, null!);
+		oneShot.Should().Throw<ArgumentNullException>();
+	}
+
+	[Fact]
 	public void NullSink_IsRejected()
 	{
 		var fingerprinter = new Fingerprinter(8000);

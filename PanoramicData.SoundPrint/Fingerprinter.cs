@@ -50,12 +50,13 @@ public sealed class Fingerprinter : IFingerprinter
 
 	/// <summary>Creates a fingerprinter for a stream at the given sample rate.</summary>
 	/// <param name="inputSampleRate">Sample rate of the audio that will be pushed, in hertz. It is resampled to <see cref="FingerprintOptions.SampleRate"/>.</param>
-	/// <param name="options">Extraction options; <see cref="FingerprintOptions"/> defaults when null.</param>
+	/// <param name="options">Extraction options.</param>
 	/// <exception cref="ArgumentException">The options are invalid.</exception>
 	/// <exception cref="ArgumentOutOfRangeException">The sample rate is not positive.</exception>
-	public Fingerprinter(int inputSampleRate, FingerprintOptions? options = null)
+	public Fingerprinter(int inputSampleRate, FingerprintOptions options)
 	{
-		_options = options ?? new FingerprintOptions();
+		ArgumentNullException.ThrowIfNull(options);
+		_options = options;
 		_options.Validate();
 		ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(inputSampleRate, 0);
 
@@ -91,6 +92,13 @@ public sealed class Fingerprinter : IFingerprinter
 		}
 	}
 
+	/// <summary>Creates a fingerprinter with default options for a stream at the given sample rate.</summary>
+	/// <param name="inputSampleRate">Sample rate of the audio that will be pushed, in hertz.</param>
+	public Fingerprinter(int inputSampleRate)
+		: this(inputSampleRate, new FingerprintOptions())
+	{
+	}
+
 	/// <inheritdoc />
 	public long FramesProcessed { get; private set; }
 
@@ -99,9 +107,9 @@ public sealed class Fingerprinter : IFingerprinter
 	/// </summary>
 	/// <param name="samples">Mono samples.</param>
 	/// <param name="sampleRate">Sample rate of <paramref name="samples"/> in hertz.</param>
-	/// <param name="options">Extraction options; defaults when null.</param>
+	/// <param name="options">Extraction options.</param>
 	/// <returns>All landmarks of the recording.</returns>
-	public static IReadOnlyList<Landmark> Fingerprint(ReadOnlySpan<float> samples, int sampleRate, FingerprintOptions? options = null)
+	public static IReadOnlyList<Landmark> Fingerprint(ReadOnlySpan<float> samples, int sampleRate, FingerprintOptions options)
 	{
 		var fingerprinter = new Fingerprinter(sampleRate, options);
 		var sink = new ListLandmarkSink();
@@ -109,6 +117,13 @@ public sealed class Fingerprinter : IFingerprinter
 		fingerprinter.Flush(sink);
 		return sink.Landmarks;
 	}
+
+	/// <summary>Fingerprints a complete recording in one call with default options.</summary>
+	/// <param name="samples">Mono samples.</param>
+	/// <param name="sampleRate">Sample rate of <paramref name="samples"/> in hertz.</param>
+	/// <returns>All landmarks of the recording.</returns>
+	public static IReadOnlyList<Landmark> Fingerprint(ReadOnlySpan<float> samples, int sampleRate) =>
+		Fingerprint(samples, sampleRate, new FingerprintOptions());
 
 	/// <inheritdoc />
 	public void Push(ReadOnlySpan<float> samples, ILandmarkSink sink)
@@ -255,36 +270,38 @@ public sealed class Fingerprinter : IFingerprinter
 	private bool IsLocalMaximum(long frame, int bin, double value)
 	{
 		var frameRange = _options.PeakNeighbourhoodFrames;
-		var binRange = _options.PeakNeighbourhoodBins;
-		var binCount = _options.BinCount;
 		for (var dt = -frameRange; dt <= frameRange; dt++)
 		{
 			var other = frame + dt;
-			if (other < 0 || other >= FramesProcessed)
+			if (other >= 0 && other < FramesProcessed && RowHasDominator(_power[(int)(other % _power.Length)], dt, bin, value))
 			{
-				continue;
-			}
-
-			var row = _power[(int)(other % _power.Length)];
-			var from = Math.Max(0, bin - binRange);
-			var to = Math.Min(binCount - 1, bin + binRange);
-			for (var other2 = from; other2 <= to; other2++)
-			{
-				if (dt == 0 && other2 == bin)
-				{
-					continue;
-				}
-
-				var neighbour = row[other2];
-				// Ties go to the earlier position, so a plateau yields exactly one peak.
-				if (neighbour > value || (neighbour == value && NeighbourIsEarlier(dt, other2, bin)))
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 
 		return true;
+	}
+
+	/// <summary>Whether any bin of a neighbouring frame within the bin range beats the candidate. Ties go to the earlier position, so a plateau yields exactly one peak.</summary>
+	private bool RowHasDominator(double[] row, int frameOffset, int bin, double value)
+	{
+		var from = Math.Max(0, bin - _options.PeakNeighbourhoodBins);
+		var to = Math.Min(_options.BinCount - 1, bin + _options.PeakNeighbourhoodBins);
+		for (var other = from; other <= to; other++)
+		{
+			if (frameOffset == 0 && other == bin)
+			{
+				continue;
+			}
+
+			var neighbour = row[other];
+			if (neighbour > value || (neighbour == value && NeighbourIsEarlier(frameOffset, other, bin)))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>Ties between equal peaks go to the earlier position in (frame, bin) order, so a plateau yields exactly one peak.</summary>
@@ -324,36 +341,9 @@ public sealed class Fingerprinter : IFingerprinter
 
 	private void EmitAnchors(long horizon, bool final)
 	{
-		var maxDelta = _options.MaxDeltaFrames;
-		while (_peakHead < _peaks.Count)
+		while (_peakHead < _peaks.Count && (final || _peaks[_peakHead].Frame + _options.MaxDeltaFrames <= horizon))
 		{
-			var anchor = _peaks[_peakHead];
-			if (!final && anchor.Frame + maxDelta > horizon)
-			{
-				break;
-			}
-
-			var taken = 0;
-			for (var j = _peakHead + 1; j < _peaks.Count && taken < _options.FanOut; j++)
-			{
-				var partner = _peaks[j];
-				var deltaFrames = partner.Frame - anchor.Frame;
-				if (deltaFrames > maxDelta)
-				{
-					break;
-				}
-
-				var deltaBins = partner.Bin - anchor.Bin;
-				if (deltaFrames < 1 || deltaBins is < -128 or > 127)
-				{
-					continue;
-				}
-
-				var hash = ((uint)anchor.Bin << 14) | ((uint)(deltaBins + 128) << 6) | (uint)deltaFrames;
-				AddLandmark(new Landmark(hash, anchor.Frame));
-				taken++;
-			}
-
+			EmitPairs(_peakHead);
 			_peakHead++;
 		}
 
@@ -361,6 +351,31 @@ public sealed class Fingerprinter : IFingerprinter
 		{
 			_peaks.RemoveRange(0, _peakHead);
 			_peakHead = 0;
+		}
+	}
+
+	/// <summary>Pairs one anchor peak with the next peaks in its target zone, up to the fan-out.</summary>
+	private void EmitPairs(int anchorIndex)
+	{
+		var anchor = _peaks[anchorIndex];
+		var taken = 0;
+		for (var j = anchorIndex + 1; j < _peaks.Count && taken < _options.FanOut; j++)
+		{
+			var partner = _peaks[j];
+			var deltaFrames = partner.Frame - anchor.Frame;
+			if (deltaFrames > _options.MaxDeltaFrames)
+			{
+				break;
+			}
+
+			var deltaBins = partner.Bin - anchor.Bin;
+			if (deltaFrames < 1 || deltaBins is < -128 or > 127)
+			{
+				continue;
+			}
+
+			AddLandmark(new Landmark(((uint)anchor.Bin << 14) | ((uint)(deltaBins + 128) << 6) | (uint)deltaFrames, anchor.Frame));
+			taken++;
 		}
 	}
 

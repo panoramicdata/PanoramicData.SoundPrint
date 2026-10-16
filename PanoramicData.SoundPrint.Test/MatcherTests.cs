@@ -216,6 +216,25 @@ public class MatcherTests(MatcherFixture fixture) : IClassFixture<MatcherFixture
 	}
 
 	[Fact]
+	public async Task ShortOverloads_UseTheDefaultOptions()
+	{
+		var query = fixture.Query(Clip(fixture.Songs[3], 5, 10));
+		(await fixture.Matcher.MatchAsync(query))[0].TrackId.Should().Be("song-3");
+		IMatcher viaInterface = fixture.Matcher;
+		(await viaInterface.MatchAsync(query))[0].TrackId.Should().Be("song-3");
+	}
+
+	[Fact]
+	public void Constructor_RejectsNullOptions()
+	{
+		using var store = new InMemoryFingerprintStore();
+		var nullFingerprintOptions = () => new Matcher(store, null!, new MatchOptions());
+		nullFingerprintOptions.Should().Throw<ArgumentNullException>();
+		var nullMatchOptions = () => new Matcher(store, new FingerprintOptions(), null!);
+		nullMatchOptions.Should().Throw<ArgumentNullException>();
+	}
+
+	[Fact]
 	public void Constructor_RejectsNullStore()
 	{
 		var act = () => new Matcher(null!);
@@ -240,30 +259,30 @@ public class MatcherTests(MatcherFixture fixture) : IClassFixture<MatcherFixture
 	[Fact]
 	public async Task NegativeOffset_IsReportedWhenTheQueryStartsBeforeTheTrack()
 	{
-		// Query = 4 s of other music, then the first 6 s of song 2: the song starts 4 s into the query.
-		var query = Clip(fixture.Songs[5], 0, 4).Concat(Clip(fixture.Songs[2], 0, 6)).ToArray();
+		// Query = 9 s of other music, then song 2 from 5 s: the query clock runs ahead of the track clock by 4 s.
+		var query = Clip(fixture.Songs[5], 0, 9).Concat(Clip(fixture.Songs[2], 5, 6)).ToArray();
 		var matches = await fixture.Matcher.RunAsync(fixture.Query(query));
 		var match = matches.First(m => m.TrackId == "song-2");
 		match.OffsetInTrack.TotalSeconds.Should().BeApproximately(-4, 0.2);
-		match.TrackStart.TotalSeconds.Should().BeApproximately(0, 1);
+		match.TrackStart.TotalSeconds.Should().BeApproximately(5, 1);
 	}
 
 	[Fact]
 	public void PoissonScore_MatchesKnownValues()
 	{
 		// P(X >= 1) for lambda = 1 is 1 - e^-1.
-		Matcher.PoissonScore(1, 1.0).Should().BeApproximately(-Math.Log10(1 - Math.Exp(-1)), 1e-9);
+		OffsetVoting.PoissonScore(1, 1.0).Should().BeApproximately(-Math.Log10(1 - Math.Exp(-1)), 1e-9);
 		// P(X >= 0) = 1.
-		Matcher.PoissonScore(0, 3.0).Should().Be(0);
+		OffsetVoting.PoissonScore(0, 3.0).Should().Be(0);
 		// P(X >= 3) for lambda = 2: 1 - e^-2 (1 + 2 + 2).
-		Matcher.PoissonScore(3, 2.0).Should().BeApproximately(-Math.Log10(1 - (Math.Exp(-2) * 5)), 1e-9);
+		OffsetVoting.PoissonScore(3, 2.0).Should().BeApproximately(-Math.Log10(1 - (Math.Exp(-2) * 5)), 1e-9);
 	}
 
 	[Fact]
 	public void PoissonScore_RisesWithVotesAndFallsWithBackground()
 	{
-		Matcher.PoissonScore(20, 0.5).Should().BeGreaterThan(Matcher.PoissonScore(10, 0.5));
-		Matcher.PoissonScore(10, 5.0).Should().BeLessThan(Matcher.PoissonScore(10, 0.5));
+		OffsetVoting.PoissonScore(20, 0.5).Should().BeGreaterThan(OffsetVoting.PoissonScore(10, 0.5));
+		OffsetVoting.PoissonScore(10, 5.0).Should().BeLessThan(OffsetVoting.PoissonScore(10, 0.5));
 	}
 }
 

@@ -25,32 +25,32 @@ public interface IFingerprintStore
 	/// <param name="trackId">The caller's id for the track.</param>
 	/// <param name="landmarks">The track's landmarks, as produced by an <see cref="IFingerprinter"/>.</param>
 	/// <param name="cancellationToken">Cancels the operation.</param>
-	ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken = default);
+	ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken);
 
 	/// <summary>Removes a track and all its landmarks.</summary>
 	/// <param name="trackId">The caller's id for the track.</param>
 	/// <param name="cancellationToken">Cancels the operation.</param>
 	/// <returns>True if the track was present.</returns>
-	ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken = default);
+	ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken);
 
 	/// <summary>Whether a track is stored.</summary>
 	/// <param name="trackId">The caller's id for the track.</param>
 	/// <param name="cancellationToken">Cancels the operation.</param>
-	ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken = default);
+	ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken);
 
 	/// <summary>The number of tracks stored.</summary>
 	/// <param name="cancellationToken">Cancels the operation.</param>
-	ValueTask<int> CountTracksAsync(CancellationToken cancellationToken = default);
+	ValueTask<int> CountTracksAsync(CancellationToken cancellationToken);
 
 	/// <summary>Finds every stored landmark whose hash equals the hash of a query landmark.</summary>
 	/// <param name="query">The query landmarks.</param>
 	/// <param name="hits">Receives the hits.</param>
 	/// <param name="cancellationToken">Cancels the operation.</param>
-	ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken = default);
+	ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken);
 
 	/// <summary>Maps track indexes from hits back to the caller's track ids.</summary>
 	/// <param name="trackIndexes">Indexes received through <see cref="IHitSink"/>.</param>
 	/// <param name="cancellationToken">Cancels the operation.</param>
 	/// <returns>The ids in the same order; null for a track removed since the hit was found.</returns>
-	ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken = default);
+	ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken);
 }

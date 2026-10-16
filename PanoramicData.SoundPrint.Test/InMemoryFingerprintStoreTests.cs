@@ -20,6 +20,13 @@ public class InMemoryFingerprintStoreTests
 	}
 
 	[Fact]
+	public void NullOptions_AreRejected()
+	{
+		var act = () => new InMemoryFingerprintStore(null!);
+		act.Should().Throw<ArgumentNullException>();
+	}
+
+	[Fact]
 	public void CustomOptions_SetTheParameterFingerprint()
 	{
 		var options = new FingerprintOptions { FanOut = 3 };

@@ -15,21 +15,35 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 
 	private readonly IDbContextFactory<SoundPrintDbContext> _factory;
 
-	/// <summary>Creates a store over a context factory. Call <see cref="InitializeAsync"/> once at start-up.</summary>
+	/// <summary>Creates a store over a context factory, for landmarks extracted with default options. Call <see cref="InitializeAsync()"/> once at start-up.</summary>
 	/// <param name="factory">Creates a context per operation.</param>
-	/// <param name="options">The extraction options landmarks come from; defaults when null.</param>
-	public PostgresFingerprintStore(IDbContextFactory<SoundPrintDbContext> factory, FingerprintOptions? options = null)
+	public PostgresFingerprintStore(IDbContextFactory<SoundPrintDbContext> factory)
+		: this(factory, new FingerprintOptions())
 	{
-		ArgumentNullException.ThrowIfNull(factory);
-		_factory = factory;
-		ParameterFingerprint = (options ?? new FingerprintOptions()).ParameterFingerprint;
 	}
 
-	/// <summary>Creates a store for a connection string, using a pooling context factory.</summary>
+	/// <summary>Creates a store over a context factory. Call <see cref="InitializeAsync()"/> once at start-up.</summary>
+	/// <param name="factory">Creates a context per operation.</param>
+	/// <param name="options">The extraction options landmarks come from.</param>
+	public PostgresFingerprintStore(IDbContextFactory<SoundPrintDbContext> factory, FingerprintOptions options)
+	{
+		ArgumentNullException.ThrowIfNull(factory);
+		ArgumentNullException.ThrowIfNull(options);
+		_factory = factory;
+		ParameterFingerprint = options.ParameterFingerprint;
+	}
+
+	/// <summary>Creates a store for a connection string, for landmarks extracted with default options.</summary>
 	/// <param name="connectionString">An Npgsql connection string.</param>
-	/// <param name="options">The extraction options landmarks come from; defaults when null.</param>
-	/// <returns>A store; call <see cref="InitializeAsync"/> before first use.</returns>
-	public static PostgresFingerprintStore Create(string connectionString, FingerprintOptions? options = null)
+	/// <returns>A store; call <see cref="InitializeAsync()"/> before first use.</returns>
+	public static PostgresFingerprintStore Create(string connectionString) =>
+		Create(connectionString, new FingerprintOptions());
+
+	/// <summary>Creates a store for a connection string.</summary>
+	/// <param name="connectionString">An Npgsql connection string.</param>
+	/// <param name="options">The extraction options landmarks come from.</param>
+	/// <returns>A store; call <see cref="InitializeAsync()"/> before first use.</returns>
+	public static PostgresFingerprintStore Create(string connectionString, FingerprintOptions options)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(connectionString);
 		return new PostgresFingerprintStore(new SimpleFactory(SoundPrintDbContext.CreateOptions(connectionString)), options);
@@ -38,13 +52,17 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	/// <inheritdoc />
 	public long ParameterFingerprint { get; }
 
+	/// <summary>Applies pending migrations and checks the fingerprint parameters, without a cancellation token.</summary>
+	/// <exception cref="InvalidOperationException">The database holds landmarks extracted with different parameters.</exception>
+	public Task InitializeAsync() => InitializeAsync(CancellationToken.None);
+
 	/// <summary>
 	/// Applies pending migrations and checks that the database was built with the same fingerprint parameters as this store.
 	/// A new database records them.
 	/// </summary>
 	/// <param name="cancellationToken">Cancels the operation.</param>
 	/// <exception cref="InvalidOperationException">The database holds landmarks extracted with different parameters.</exception>
-	public async Task InitializeAsync(CancellationToken cancellationToken = default)
+	public async Task InitializeAsync(CancellationToken cancellationToken)
 	{
 		var context = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
 		await using var contextLease = context.ConfigureAwait(false);
@@ -64,7 +82,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken = default)
+	public async ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(trackId);
 		ArgumentNullException.ThrowIfNull(landmarks);
@@ -107,7 +125,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken = default)
+	public async ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(trackId);
 		var context = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -116,7 +134,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken = default)
+	public async ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(trackId);
 		var context = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -125,7 +143,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask<int> CountTracksAsync(CancellationToken cancellationToken = default)
+	public async ValueTask<int> CountTracksAsync(CancellationToken cancellationToken)
 	{
 		var context = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
 		await using var contextLease = context.ConfigureAwait(false);
@@ -133,7 +151,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken = default)
+	public async ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken)
 	{
 		ArgumentNullException.ThrowIfNull(query);
 		ArgumentNullException.ThrowIfNull(hits);
@@ -181,7 +199,7 @@ public sealed class PostgresFingerprintStore : IFingerprintStore
 	}
 
 	/// <inheritdoc />
-	public async ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken = default)
+	public async ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken)
 	{
 		ArgumentNullException.ThrowIfNull(trackIndexes);
 		var wanted = trackIndexes.Distinct().ToArray();

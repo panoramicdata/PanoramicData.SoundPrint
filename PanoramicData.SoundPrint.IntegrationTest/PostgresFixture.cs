@@ -54,7 +54,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 	public async Task<(PostgresFingerprintStore Store, string ConnectionString)> CreateStoreAsync(FingerprintOptions? options = null)
 	{
 		var connectionString = await CreateDatabaseAsync();
-		var store = PostgresFingerprintStore.Create(connectionString, options);
+		var store = PostgresFingerprintStore.Create(connectionString, options ?? new FingerprintOptions());
 		await store.InitializeAsync(TestContext.Current.CancellationToken);
 		return (store, connectionString);
 	}

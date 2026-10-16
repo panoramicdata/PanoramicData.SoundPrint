@@ -12,10 +12,19 @@ public sealed class InMemoryFingerprintStore : IFingerprintStore, IDisposable
 	private readonly Dictionary<int, TrackEntry> _tracks = [];
 	private int _nextIndex;
 
+	/// <summary>Creates an empty store for landmarks extracted with default options.</summary>
+	public InMemoryFingerprintStore()
+		: this(new FingerprintOptions())
+	{
+	}
+
 	/// <summary>Creates an empty store.</summary>
-	/// <param name="options">The extraction options landmarks will come from; defaults when null.</param>
-	public InMemoryFingerprintStore(FingerprintOptions? options = null) =>
-		ParameterFingerprint = (options ?? new FingerprintOptions()).ParameterFingerprint;
+	/// <param name="options">The extraction options landmarks will come from.</param>
+	public InMemoryFingerprintStore(FingerprintOptions options)
+	{
+		ArgumentNullException.ThrowIfNull(options);
+		ParameterFingerprint = options.ParameterFingerprint;
+	}
 
 	/// <inheritdoc />
 	public long ParameterFingerprint { get; }
@@ -129,7 +138,7 @@ public sealed class InMemoryFingerprintStore : IFingerprintStore, IDisposable
 	}
 
 	/// <inheritdoc />
-	public ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken = default)
+	public ValueTask AddTrackAsync(string trackId, IReadOnlyList<Landmark> landmarks, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		AddTrack(trackId, landmarks);
@@ -137,28 +146,28 @@ public sealed class InMemoryFingerprintStore : IFingerprintStore, IDisposable
 	}
 
 	/// <inheritdoc />
-	public ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken = default)
+	public ValueTask<bool> RemoveTrackAsync(string trackId, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		return ValueTask.FromResult(RemoveTrack(trackId));
 	}
 
 	/// <inheritdoc />
-	public ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken = default)
+	public ValueTask<bool> ContainsTrackAsync(string trackId, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		return ValueTask.FromResult(ContainsTrack(trackId));
 	}
 
 	/// <inheritdoc />
-	public ValueTask<int> CountTracksAsync(CancellationToken cancellationToken = default)
+	public ValueTask<int> CountTracksAsync(CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		return ValueTask.FromResult(TrackCount);
 	}
 
 	/// <inheritdoc />
-	public ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken = default)
+	public ValueTask LookupAsync(IReadOnlyList<Landmark> query, IHitSink hits, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		Lookup(query, hits);
@@ -166,7 +175,7 @@ public sealed class InMemoryFingerprintStore : IFingerprintStore, IDisposable
 	}
 
 	/// <inheritdoc />
-	public ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken = default)
+	public ValueTask<IReadOnlyList<string?>> ResolveTrackIdsAsync(IReadOnlyList<int> trackIndexes, CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		return ValueTask.FromResult(ResolveTrackIds(trackIndexes));
@@ -197,12 +206,12 @@ public sealed class InMemoryFingerprintStore : IFingerprintStore, IDisposable
 		return true;
 	}
 
-	private T Read<T>(Func<T> read)
+	private T Read<T>(Func<T> action)
 	{
 		_lock.EnterReadLock();
 		try
 		{
-			return read();
+			return action();
 		}
 		finally
 		{
