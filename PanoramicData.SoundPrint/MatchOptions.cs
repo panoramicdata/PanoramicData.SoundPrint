@@ -24,11 +24,11 @@ public sealed record MatchOptions
 	/// <summary>The lowest expected random-agreement level per offset window, which stops sparse tracks scoring absurdly high. Default 0.05.</summary>
 	public double MinBackground { get; init; } = 0.05;
 
-	/// <summary>The <see cref="Match.Score"/> at which confidence is 0.5. Calibrated against the benchmark harness.</summary>
-	public double ConfidenceMidpoint { get; init; } = 12;
+	/// <summary>The <see cref="Match.Score"/> at which confidence is 0.5. Fitted on the real-music benchmark (see the README).</summary>
+	public double ConfidenceMidpoint { get; init; } = 20.7;
 
-	/// <summary>How quickly confidence rises around the midpoint, per unit of score. Calibrated against the benchmark harness.</summary>
-	public double ConfidenceSlope { get; init; } = 0.4;
+	/// <summary>How quickly confidence rises around the midpoint, per unit of score. Fitted on the real-music benchmark (see the README).</summary>
+	public double ConfidenceSlope { get; init; } = 0.6;
 
 	/// <summary>Checks the options for consistency.</summary>
 	/// <exception cref="ArgumentException">A value is out of range.</exception>

@@ -35,6 +35,10 @@ internal static class RealMusicRunner
 
 		var usable = decoded.Select((samples, i) => (samples, track: tracks[i])).Where(x => x.samples.Length >= TrackSeconds * Rate).ToList();
 		var clips = usable.Select(x => x.samples.AsSpan(0, (int)(TrackSeconds * Rate)).ToArray()).ToArray();
+		var distinct = DistinctTracks(clips);
+		Console.WriteLine($"Dropped {clips.Length - distinct.Count} tracks that duplicate another track in the set (the same recording published twice).");
+		usable = [.. distinct.Select(i => usable[i])];
+		clips = [.. distinct.Select(i => clips[i])];
 		var split = (int)(clips.Length * 0.8);
 		var present = clips[..split];
 		var absent = clips[split..];
@@ -78,6 +82,37 @@ internal static class RealMusicRunner
 		}
 
 		return 0;
+	}
+
+	/// <summary>
+	/// Indexes of tracks to keep after dropping any that match an earlier track strongly: public music collections contain the same
+	/// recording more than once, and a duplicate would count as a false match for what is really a correct one.
+	/// </summary>
+	private static List<int> DistinctTracks(float[][] clips)
+	{
+		var options = new FingerprintOptions();
+		var landmarks = new IReadOnlyList<Landmark>[clips.Length];
+		Parallel.For(0, clips.Length, i => landmarks[i] = Fingerprinter.Fingerprint(clips[i], Rate, options));
+		using var store = new InMemoryFingerprintStore(options);
+		for (var i = 0; i < clips.Length; i++)
+		{
+			store.AddTrack(Corpus.TrackId(i), landmarks[i]);
+		}
+
+		var matcher = new Matcher(store, options, new MatchOptions { MinConfidence = 0, MinVotes = 10 });
+		var duplicate = new bool[clips.Length];
+		Parallel.For(0, clips.Length, i =>
+		{
+			var matches = matcher.MatchAsync(landmarks[i]).AsTask().GetAwaiter().GetResult();
+			foreach (var m in matches)
+			{
+				if (m.TrackId != Corpus.TrackId(i) && m.Votes >= 30 && int.Parse(m.TrackId.AsSpan(5), System.Globalization.CultureInfo.InvariantCulture) < i)
+				{
+					duplicate[i] = true;
+				}
+			}
+		});
+		return [.. Enumerable.Range(0, clips.Length).Where(i => !duplicate[i])];
 	}
 
 	private sealed record TrackInfo(string Path, string Id, string Artist, string Title, string License);

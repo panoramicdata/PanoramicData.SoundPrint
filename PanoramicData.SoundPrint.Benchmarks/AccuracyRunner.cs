@@ -6,7 +6,7 @@ using PanoramicData.SoundPrint.TestAudio;
 namespace PanoramicData.SoundPrint.Benchmarks;
 
 /// <summary>What happened to the top match of one query.</summary>
-internal sealed record Trial(bool Correct, double Score, int Votes, double MatchMilliseconds);
+internal sealed record Trial(bool Correct, bool PositionCorrect, double Score, int Votes, double MatchMilliseconds);
 
 /// <summary>All trials of one scenario at one query length.</summary>
 internal sealed record Cell(Scenario Scenario, double QuerySeconds, IReadOnlyList<Trial> Present, IReadOnlyList<Trial> Absent);
@@ -79,7 +79,7 @@ internal static class AccuracyRunner
 		{
 			var count = Math.Min(config.Songs, scenario.MaxSongs);
 			var present = Degrade(scenario, corpus.Songs, count, config.Rate, 11);
-			var absent = Degrade(scenario, absentSongs, count, config.Rate, 12);
+			var absent = Degrade(scenario, absentSongs, Math.Min(count, absentSongs.Length), config.Rate, 12);
 			foreach (var length in config.QueryLengths)
 			{
 				var seed = (scenarioIndex * 100) + (int)length;
@@ -120,11 +120,11 @@ internal static class AccuracyRunner
 			var matches = corpus.Matcher.MatchAsync(landmarks).AsTask().GetAwaiter().GetResult();
 			watch.Stop();
 			var top = matches.Count > 0 ? matches[0] : null;
-			var correct = expectTrack
-				&& top is not null
-				&& top.TrackId == Corpus.TrackId(song)
-				&& Math.Abs(top.OffsetInTrack.TotalSeconds - ((double)startSample / config.Rate)) <= PositionToleranceSeconds;
-			trials[t] = new Trial(correct, top?.Score ?? 0, top?.Votes ?? 0, watch.Elapsed.TotalMilliseconds);
+			// Identification is judged by track: loop-based music repeats exactly, so the right track can legitimately match at another
+			// offset. Position accuracy is reported separately.
+			var correct = expectTrack && top is not null && top.TrackId == Corpus.TrackId(song);
+			var position = correct && Math.Abs(top!.OffsetInTrack.TotalSeconds - ((double)startSample / config.Rate)) <= PositionToleranceSeconds;
+			trials[t] = new Trial(correct, position, top?.Score ?? 0, top?.Votes ?? 0, watch.Elapsed.TotalMilliseconds);
 		});
 		return trials;
 	}
@@ -224,6 +224,9 @@ internal static class AccuracyRunner
 			sb.AppendLine(row.ToString());
 		}
 
+		var identified = cells.Where(c => c.QuerySeconds >= 5).SelectMany(c => c.Present).Where(t => t.Correct && t.Score >= scoreThreshold).ToList();
+		sb.AppendLine();
+		sb.AppendLine($"Position accuracy: of the queries of 5 s or longer whose track was identified above the threshold, {100.0 * identified.Count(t => t.PositionCorrect) / Math.Max(1, identified.Count):F1}% also had the matched position within {PositionToleranceSeconds:F1} s of the true one (the rest matched the right track at another offset, as happens with loop-based music that repeats exactly).");
 		sb.AppendLine();
 		sb.AppendLine("## Match latency by query length (this machine, in-memory store)");
 		sb.AppendLine();
