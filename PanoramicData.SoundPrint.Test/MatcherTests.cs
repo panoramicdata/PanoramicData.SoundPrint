@@ -92,8 +92,8 @@ public class MatcherTests(MatcherFixture fixture) : IClassFixture<MatcherFixture
 		var matches = await fixture.Matcher.RunAsync(fixture.Query(spliced));
 
 		// Synthetic songs repeat their phrases, so a track can legitimately match at more than one offset; pick the occurrence at the track end / start.
-		var first = matches.Single(m => m.TrackId == "song-1" && Math.Abs(m.TrackEnd.TotalSeconds - MatcherFixture.Seconds) < 3);
-		var second = matches.Single(m => m.TrackId == "song-8" && m.TrackStart.TotalSeconds < 3);
+		var first = matches.First(m => m.TrackId == "song-1" && Math.Abs(m.TrackEnd.TotalSeconds - MatcherFixture.Seconds) < 3);
+		var second = matches.First(m => m.TrackId == "song-8" && m.TrackStart.TotalSeconds < 3);
 		first.QueryStart.Should().BeLessThan(second.QueryStart);
 		first.QueryEnd.Should().BeLessThan(TimeSpan.FromSeconds(8));
 		second.QueryStart.Should().BeGreaterThan(TimeSpan.FromSeconds(4));

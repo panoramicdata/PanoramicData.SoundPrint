@@ -33,6 +33,22 @@ internal static class TuningRunner
 			("target zone 40 frames", baseline with { MaxDeltaFrames = 40 })
 		};
 
+		if (args.Flag("combos"))
+		{
+			var r11 = baseline with { SampleRate = 11025 };
+			variants =
+			[
+				("11025 Hz", r11),
+				("11025 Hz, fan-out 8", r11 with { FanOut = 8 }),
+				("11025 Hz, 8-bin neighbourhood", r11 with { PeakNeighbourhoodBins = 8 }),
+				("11025 Hz, peaks per band 4", r11 with { PeaksPerBandPerBlock = 4 }),
+				("11025 Hz, fan-out 8, 8 bins", r11 with { FanOut = 8, PeakNeighbourhoodBins = 8 }),
+				("11025 Hz, fan-out 6, 8 bins, peaks 4", r11 with { FanOut = 6, PeakNeighbourhoodBins = 8, PeaksPerBandPerBlock = 4 }),
+				("11025 Hz, fan-out 8, 8 bins, peaks 4", r11 with { FanOut = 8, PeakNeighbourhoodBins = 8, PeaksPerBandPerBlock = 4 }),
+				("8000 Hz, fan-out 8, 8 bins, peaks 4", baseline with { FanOut = 8, PeakNeighbourhoodBins = 8, PeaksPerBandPerBlock = 4 })
+			];
+		}
+
 		if (args.String("only") is { } only)
 		{
 			var wanted = only.Split(',', StringSplitOptions.TrimEntries);

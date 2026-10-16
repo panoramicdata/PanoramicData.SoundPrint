@@ -6,12 +6,12 @@ public class FingerprintOptionsTests
 	public void Defaults_AreValid() => new FingerprintOptions().Validate();
 
 	[Fact]
-	public void FrameDuration_IsExactly32Milliseconds_ByDefault() =>
-		new FingerprintOptions().FrameDuration.Should().Be(TimeSpan.FromMilliseconds(32));
+	public void FrameDuration_IsExactly32Milliseconds_At8kHz() =>
+		new FingerprintOptions { SampleRate = 8000 }.FrameDuration.Should().Be(TimeSpan.FromMilliseconds(32));
 
 	[Fact]
 	public void FramesToTime_ScalesLinearly() =>
-		new FingerprintOptions().FramesToTime(1000).Should().Be(TimeSpan.FromSeconds(32));
+		new FingerprintOptions { SampleRate = 8000 }.FramesToTime(1000).Should().Be(TimeSpan.FromSeconds(32));
 
 	[Fact]
 	public void BinCount_IsHalfTheWindowPlusOne() =>
@@ -57,7 +57,7 @@ public class FingerprintOptionsTests
 
 	public static TheoryData<FingerprintOptions> HashAffectingChanges => new()
 	{
-		new FingerprintOptions { SampleRate = 11025 },
+		new FingerprintOptions { SampleRate = 8000 },
 		new FingerprintOptions { WindowSize = 512, HopSize = 128, BandEdges = [0, 8, 16, 32, 64, 128, 257] },
 		new FingerprintOptions { HopSize = 128 },
 		new FingerprintOptions { PeakNeighbourhoodBins = 10 },

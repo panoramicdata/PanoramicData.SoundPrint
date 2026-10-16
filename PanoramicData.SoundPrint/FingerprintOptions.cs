@@ -9,8 +9,8 @@ public sealed record FingerprintOptions
 	/// <summary>The hash layout version, folded into <see cref="ParameterFingerprint"/>.</summary>
 	public static int HashFormatVersion => 1;
 
-	/// <summary>The sample rate in hertz that audio is resampled to before analysis. Default 8000.</summary>
-	public int SampleRate { get; init; } = 8000;
+	/// <summary>The sample rate in hertz that audio is resampled to before analysis. Default 11025.</summary>
+	public int SampleRate { get; init; } = 11025;
 
 	/// <summary>STFT window length in samples at <see cref="SampleRate"/>; a power of two from 64 to 1024. Default 1024.</summary>
 	public int WindowSize { get; init; } = 1024;
@@ -18,8 +18,8 @@ public sealed record FingerprintOptions
 	/// <summary>Samples between successive STFT windows. Default 256.</summary>
 	public int HopSize { get; init; } = 256;
 
-	/// <summary>A peak must be the largest within this many bins either side. Default 12.</summary>
-	public int PeakNeighbourhoodBins { get; init; } = 12;
+	/// <summary>A peak must be the largest within this many bins either side. Default 8.</summary>
+	public int PeakNeighbourhoodBins { get; init; } = 8;
 
 	/// <summary>A peak must be the largest within this many frames either side. Default 3.</summary>
 	public int PeakNeighbourhoodFrames { get; init; } = 3;
@@ -36,14 +36,14 @@ public sealed record FingerprintOptions
 	/// </summary>
 	public IReadOnlyList<int> BandEdges { get; init; } = [0, 8, 16, 32, 64, 128, 256, 513];
 
-	/// <summary>The most peaks kept per band in each density block. Default 6.</summary>
-	public int PeaksPerBandPerBlock { get; init; } = 6;
+	/// <summary>The most peaks kept per band in each density block. Default 4.</summary>
+	public int PeaksPerBandPerBlock { get; init; } = 4;
 
 	/// <summary>Frames per density block (about one second at the defaults). Default 32.</summary>
 	public int DensityBlockFrames { get; init; } = 32;
 
-	/// <summary>The most partners paired with each anchor peak. Default 5.</summary>
-	public int FanOut { get; init; } = 5;
+	/// <summary>The most partners paired with each anchor peak. Default 6.</summary>
+	public int FanOut { get; init; } = 6;
 
 	/// <summary>The target zone extends this many frames beyond the anchor; 1 to 63. Default 63.</summary>
 	public int MaxDeltaFrames { get; init; } = 63;

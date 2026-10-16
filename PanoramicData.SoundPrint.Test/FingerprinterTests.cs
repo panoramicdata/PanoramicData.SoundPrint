@@ -121,8 +121,8 @@ public class FingerprinterTests
 		checksum.Should().Be(GoldenChecksum);
 	}
 
-	private const int GoldenCount = 2995;
-	private const ulong GoldenChecksum = 10414274354598103152UL;
+	private const int GoldenCount = 3956;
+	private const ulong GoldenChecksum = 12212493684135057515UL;
 
 	[Fact]
 	public void Flush_EmitsLandmarksThatLookaheadWasHolding()
@@ -171,7 +171,7 @@ public class FingerprinterTests
 	}
 
 	[Theory]
-	[InlineData(8000)]
+	[InlineData(11025)]
 	[InlineData(22050)]
 	public void Reset_AllowsReuseWithIdenticalOutput(int rate)
 	{
@@ -191,9 +191,9 @@ public class FingerprinterTests
 	[Fact]
 	public void FramesProcessed_CountsAnalysisWindows()
 	{
-		var fingerprinter = new Fingerprinter(8000);
-		fingerprinter.Push(new float[8000], new CountingSink());
-		fingerprinter.FramesProcessed.Should().Be(((8000 - 1024) / 256) + 1);
+		var fingerprinter = new Fingerprinter(11025);
+		fingerprinter.Push(new float[11025], new CountingSink());
+		fingerprinter.FramesProcessed.Should().Be(((11025 - 1024) / 256) + 1);
 	}
 
 	[Fact]
@@ -275,14 +275,14 @@ public class FingerprinterTests
 	public void PeriodicSignal_WithIdenticalFrames_YieldsDeterministicPlateauPeaks()
 	{
 		// Period equals the hop, so every frame is identical and peaks tie across time; ties must resolve identically each run.
-		var x = new float[8000 * 5];
+		var x = new float[11025 * 5];
 		for (var i = 0; i < x.Length; i++)
 		{
 			x[i] = (((i % 256) / 255f) * 2) - 1;
 		}
 
-		var first = Fingerprinter.Fingerprint(x, 8000);
-		first.Should().Equal(Fingerprinter.Fingerprint(x, 8000));
+		var first = Fingerprinter.Fingerprint(x, 11025);
+		first.Should().Equal(Fingerprinter.Fingerprint(x, 11025));
 	}
 
 	[Theory]
