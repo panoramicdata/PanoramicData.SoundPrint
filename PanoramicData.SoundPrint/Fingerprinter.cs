@@ -294,8 +294,8 @@ public sealed class Fingerprinter : IFingerprinter
 				continue;
 			}
 
-			var neighbour = row[other];
-			if (neighbour > value || (neighbour == value && NeighbourIsEarlier(frameOffset, other, bin)))
+			var order = row[other].CompareTo(value);
+			if (order > 0 || (order == 0 && NeighbourIsEarlier(frameOffset, other, bin)))
 			{
 				return true;
 			}

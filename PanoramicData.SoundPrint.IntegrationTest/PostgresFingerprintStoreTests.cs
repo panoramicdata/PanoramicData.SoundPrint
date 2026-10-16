@@ -200,8 +200,6 @@ public class PostgresFingerprintStoreTests(PostgresFixture fixture) : IClassFixt
 		nullFactory.Should().Throw<ArgumentNullException>();
 		var nullOptions = () => new PostgresFingerprintStore(new TestFactory(SoundPrintDbContext.CreateOptions("Host=localhost")), null!);
 		nullOptions.Should().Throw<ArgumentNullException>();
-		var nullOptions = () => new PostgresFingerprintStore(new TestFactory(SoundPrintDbContext.CreateOptions("Host=localhost")), null!);
-		nullOptions.Should().Throw<ArgumentNullException>();
 		var emptyConnection = () => PostgresFingerprintStore.Create("");
 		emptyConnection.Should().Throw<ArgumentException>();
 	}

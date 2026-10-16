@@ -7,7 +7,7 @@ namespace PanoramicData.SoundPrint;
 public sealed record FingerprintOptions
 {
 	/// <summary>The hash layout version, folded into <see cref="ParameterFingerprint"/>.</summary>
-	public const int HashFormatVersion = 1;
+	public static int HashFormatVersion => 1;
 
 	/// <summary>The sample rate in hertz that audio is resampled to before analysis. Default 8000.</summary>
 	public int SampleRate { get; init; } = 8000;
