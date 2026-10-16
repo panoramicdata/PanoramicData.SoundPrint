@@ -346,6 +346,39 @@ public class FingerprinterTests
 		badOptions.Should().Throw<ArgumentException>();
 	}
 
+	private sealed class RecordingObserver : IPeakObserver
+	{
+		public List<SpectralPeak> Peaks { get; } = [];
+		public void OnPeaks(ReadOnlySpan<SpectralPeak> peaks) => Peaks.AddRange(peaks);
+	}
+
+	[Fact]
+	public void PeakObserver_ReceivesTheKeptPeaksInOrder()
+	{
+		var observer = new RecordingObserver();
+		var fingerprinter = new Fingerprinter(11025) { PeakObserver = observer };
+		var sink = new ListLandmarkSink();
+		fingerprinter.Push(Song(30, 12, 11025), sink);
+		fingerprinter.Flush(sink);
+
+		observer.Peaks.Should().NotBeEmpty();
+		observer.Peaks.Should().OnlyContain(p => p.Bin >= 2 && p.Power > 0);
+		// Every landmark anchor is one of the observed peaks.
+		var anchors = observer.Peaks.Select(p => ((long)p.Frame << 16) | (uint)p.Bin).ToHashSet();
+		sink.Landmarks.Should().OnlyContain(l => anchors.Contains(((long)l.AnchorFrame << 16) | ((l.Hash >> 14) & 0x1FF)));
+	}
+
+	[Fact]
+	public void WithoutAnObserver_ExtractionIsUnchanged()
+	{
+		var song = Song(31, 8, 11025);
+		var sink = new ListLandmarkSink();
+		var observed = new Fingerprinter(11025) { PeakObserver = new RecordingObserver() };
+		observed.Push(song, sink);
+		observed.Flush(sink);
+		sink.Landmarks.Should().Equal(Fingerprinter.Fingerprint(song, 11025));
+	}
+
 	[Fact]
 	public void NullOptions_AreRejected()
 	{

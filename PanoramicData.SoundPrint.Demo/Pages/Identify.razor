@@ -1,0 +1,245 @@
+@page "/identify"
+@implements IAsyncDisposable
+@using PanoramicData.SoundPrint.TestAudio
+@inject DemoCatalogue Catalogue
+@inject IdentifySession Session
+@inject IJSRuntime JS
+
+<h1>Identify</h1>
+<p class="lead">
+	Listen through the microphone or feed in a file. The audio is fingerprinted here, matched every second or two against a rolling
+	twelve-second window, and nothing leaves your device.
+</p>
+
+<SeedGate>
+
+<div class="row">
+	@if (!listening)
+	{
+		<button @onclick="StartAsync">Listen with microphone</button>
+	}
+	else
+	{
+		<button class="secondary" @onclick="StopAsync">Stop listening</button>
+	}
+	<button class="secondary" @onclick="ResetAsync">Clear</button>
+	<span class="badge @(listening ? "ok" : "")">@(listening ? "listening" : "idle")</span>
+	<span class="note">@Session.HeardSeconds.ToString("0.0") s heard</span>
+</div>
+
+@if (error is not null)
+{
+	<div class="card"><p style="color:var(--bad)">@error</p></div>
+}
+
+<div class="grid">
+	<div class="card">
+		<h3>Play a catalogue track</h3>
+		<p>Press play, then listen with the microphone: your speakers become the radio.</p>
+		<div class="row">
+			<select @bind="PlayId">
+				@foreach (var track in Catalogue.Tracks.Where(t => t.Samples is not null))
+				{
+					<option value="@track.Id">@track.Title</option>
+				}
+			</select>
+			<button class="secondary" @onclick="PrepareAudioAsync">Load</button>
+		</div>
+		@if (audioUrl is not null)
+		{
+			<audio controls src="@audioUrl" style="width:100%"></audio>
+		}
+	</div>
+	<div class="card">
+		<h3>Or drop in a file</h3>
+		<p>Any audio file your browser can decode. It is read locally and fed in like a live stream.</p>
+		<div class="row">
+			<InputFile id="identifyFile" OnChange="OnFileChosen" />
+		</div>
+		@if (fileStatus is not null)
+		{
+			<p class="note">@fileStatus</p>
+		}
+	</div>
+</div>
+
+<h2>Result</h2>
+<div class="card">
+	@if (Session.Best is { } best && Catalogue.Find(best.TrackId) is { } info)
+	{
+		<div class="result">
+			<div>
+				<div class="title">@info.Title</div>
+				<div class="meta">@info.Artist &middot; @info.Source</div>
+				<div class="meta">
+					Matched @Format(best.TrackStart) to @Format(best.TrackEnd) of the track
+					&middot; @best.Votes agreeing landmarks &middot; score @best.Score.ToString("0.0")
+				</div>
+			</div>
+			<div>
+				<div class="meta">confidence @((best.Confidence * 100).ToString("0"))%</div>
+				<div class="meter"><div style="width:@((best.Confidence * 100).ToString("0"))%"></div></div>
+			</div>
+		</div>
+	}
+	else
+	{
+		<p class="note">Nothing recognised yet. Music needs a few seconds before it can be named.</p>
+	}
+</div>
+
+<h2>What it hears</h2>
+<p class="note">Left to right is time (last twelve seconds); bottom to top is frequency. Each dot is a spectral peak that survived band balancing: the raw material of the fingerprint.</p>
+<canvas id="spectrum" width="1000" height="160" style="@(listening ? "" : "display:none")"></canvas>
+<canvas id="constellation" width="1000" height="260"></canvas>
+
+<h2>Heard so far</h2>
+<div class="timeline">
+	@foreach (var segment in Session.History)
+	{
+		<div class="item">
+			<span class="time">@Format(TimeSpan.FromSeconds(segment.FirstHeardAt))</span>
+			<strong>@(Catalogue.Find(segment.TrackId)?.Title ?? segment.TrackId)</strong>
+			<span class="note">first matched at track position @Format(segment.TrackStart)</span>
+		</div>
+	}
+	@if (Session.History.Count == 0)
+	{
+		<p class="note">Nothing yet.</p>
+	}
+</div>
+
+</SeedGate>
+
+@code {
+	private IJSObjectReference? module;
+	private DotNetObjectReference<Identify>? self;
+	private bool listening;
+	private string? error;
+	private string? fileStatus;
+	private string? playId;
+
+	private string? PlayId
+	{
+		get => playId ?? Catalogue.Tracks.FirstOrDefault(t => t.Samples is not null)?.Id;
+		set => playId = value;
+	}
+	private string? audioUrl;
+	private DateTime lastDraw = DateTime.MinValue;
+
+	protected override async Task OnInitializedAsync()
+	{
+		Session.Changed += OnSessionChanged;
+		await Task.CompletedTask;
+	}
+
+	private async Task<IJSObjectReference> ModuleAsync() => module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+
+	private async Task StartAsync()
+	{
+		error = null;
+		try
+		{
+			self ??= DotNetObjectReference.Create(this);
+			Session.Reset();
+			await (await ModuleAsync()).InvokeAsync<double>("startMic", self, "spectrum");
+			listening = true;
+		}
+		catch (JSException ex)
+		{
+			error = "The microphone could not be opened: " + ex.Message;
+		}
+	}
+
+	private async Task StopAsync()
+	{
+		await (await ModuleAsync()).InvokeVoidAsync("stopMic");
+		listening = false;
+	}
+
+	private async Task ResetAsync()
+	{
+		Session.Reset();
+		await (await ModuleAsync()).InvokeVoidAsync("clearCanvas", "constellation");
+	}
+
+	private async Task OnFileChosen(InputFileChangeEventArgs args)
+	{
+		error = null;
+		try
+		{
+			self ??= DotNetObjectReference.Create(this);
+			Session.Reset();
+			fileStatus = "Decoding and listening...";
+			StateHasChanged();
+			var info = await (await ModuleAsync()).InvokeAsync<FileInfo?>("streamFile", "identifyFile", self);
+			fileStatus = info is null ? "No file chosen." : $"Finished {info.Name} ({info.Seconds:0} s at {info.Rate} Hz).";
+		}
+		catch (JSException ex)
+		{
+			error = "That file could not be decoded: " + ex.Message;
+			fileStatus = null;
+		}
+	}
+
+	private async Task PrepareAudioAsync()
+	{
+		var track = Catalogue.Find(PlayId ?? string.Empty);
+		if (track?.Samples is null)
+		{
+			return;
+		}
+
+		var wav = WavFile.ToBytes(track.Samples, DemoCatalogue.SampleRate);
+		audioUrl = await (await ModuleAsync()).InvokeAsync<string>("createAudioUrl", wav);
+	}
+
+	[JSInvokable]
+	public Task PushAudio(byte[] pcm, int sampleRate) => Session.PushPcmAsync(pcm, sampleRate);
+
+	private void OnSessionChanged() => _ = InvokeAsync(async () =>
+	{
+		StateHasChanged();
+		if ((DateTime.UtcNow - lastDraw).TotalMilliseconds < 300)
+		{
+			return;
+		}
+
+		lastDraw = DateTime.UtcNow;
+		var cutoff = Session.LatestFrame - Session.WindowFrames;
+		var flat = new List<int>();
+		foreach (var peak in Session.RecentPeaks)
+		{
+			flat.Add(peak.Frame - cutoff);
+			flat.Add(peak.Bin);
+		}
+
+		await (await ModuleAsync()).InvokeVoidAsync("drawConstellation", "constellation", flat, Array.Empty<int>(), Session.WindowFrames, Catalogue.Options.BinCount);
+	});
+
+	private static string Format(TimeSpan t)
+	{
+		var seconds = Math.Max(0, t.TotalSeconds);
+		return $"{(int)(seconds / 60)}:{(int)(seconds % 60):00}";
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		Session.Changed -= OnSessionChanged;
+		if (module is not null)
+		{
+			try
+			{
+				await module.InvokeVoidAsync("stopMic");
+				await module.DisposeAsync();
+			}
+			catch (JSDisconnectedException)
+			{
+			}
+		}
+
+		self?.Dispose();
+	}
+
+	private sealed record FileInfo(string Name, double Seconds, int Rate);
+}

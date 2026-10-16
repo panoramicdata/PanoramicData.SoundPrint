@@ -35,7 +35,7 @@ internal static class RealMusicRunner
 
 		var usable = decoded.Select((samples, i) => (samples, track: tracks[i])).Where(x => x.samples.Length >= TrackSeconds * Rate).ToList();
 		var clips = usable.Select(x => x.samples.AsSpan(0, (int)(TrackSeconds * Rate)).ToArray()).ToArray();
-		var distinct = DistinctTracks(clips);
+		var (distinct, landmarksPerSecond) = DistinctTracks(clips);
 		Console.WriteLine($"Dropped {clips.Length - distinct.Count} tracks that duplicate another track in the set (the same recording published twice).");
 		usable = [.. distinct.Select(i => usable[i])];
 		clips = [.. distinct.Select(i => clips[i])];
@@ -63,7 +63,8 @@ internal static class RealMusicRunner
 			PresentSongs = present,
 			AbsentSongs = absent,
 			Title = source == "fma" ? "Real-music results (Free Music Archive, Creative Commons)" : "Real-music results (local audio)",
-			Description = $"Database: {present.Length} real tracks of {TrackSeconds:F0} s ({present.Length * TrackSeconds / 3600:F2} hours) decoded to {Rate} Hz mono and fingerprinted at 8000 Hz; {absent.Length} further tracks held out as absent queries. " +
+			Description = $"Database: {present.Length} real tracks of {TrackSeconds:F0} s ({present.Length * TrackSeconds / 3600:F2} hours) decoded to {Rate} Hz mono and fingerprinted at {new FingerprintOptions().SampleRate} Hz; {absent.Length} further tracks held out as absent queries. " +
+				$"The real tracks produce {landmarksPerSecond:F0} landmarks per second of audio at the default options. " +
 				$"{trials} queries per cell. Re-encode and chain scenarios use {Math.Min(120, present.Length)} tracks. " +
 				(source == "fma" ? "Source and licences: benchmarks/SOURCES.md. Audio stays local and is not committed." : "Only aggregate numbers are reported."),
 			Command = $"real --source {source}"
@@ -88,7 +89,7 @@ internal static class RealMusicRunner
 	/// Indexes of tracks to keep after dropping any that match an earlier track strongly: public music collections contain the same
 	/// recording more than once, and a duplicate would count as a false match for what is really a correct one.
 	/// </summary>
-	private static List<int> DistinctTracks(float[][] clips)
+	private static (List<int> Keep, double LandmarksPerSecond) DistinctTracks(float[][] clips)
 	{
 		var options = new FingerprintOptions();
 		var landmarks = new IReadOnlyList<Landmark>[clips.Length];
@@ -112,7 +113,7 @@ internal static class RealMusicRunner
 				}
 			}
 		});
-		return [.. Enumerable.Range(0, clips.Length).Where(i => !duplicate[i])];
+		return ([.. Enumerable.Range(0, clips.Length).Where(i => !duplicate[i])], landmarks.Sum(l => (long)l.Count) / (clips.Length * TrackSeconds));
 	}
 
 	private sealed record TrackInfo(string Path, string Id, string Artist, string Title, string License);

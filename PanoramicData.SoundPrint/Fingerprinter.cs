@@ -99,6 +99,9 @@ public sealed class Fingerprinter : IFingerprinter
 	{
 	}
 
+	/// <summary>Receives the spectral peaks the fingerprinter keeps, when set. Null by default, in which case nothing extra is computed or allocated.</summary>
+	public IPeakObserver? PeakObserver { get; set; }
+
 	/// <inheritdoc />
 	public long FramesProcessed { get; private set; }
 
@@ -304,6 +307,22 @@ public sealed class Fingerprinter : IFingerprinter
 		return false;
 	}
 
+	private void NotifyObserver(ReadOnlySpan<Peak> kept)
+	{
+		if (PeakObserver is null)
+		{
+			return;
+		}
+
+		var observed = new SpectralPeak[kept.Length];
+		for (var i = 0; i < kept.Length; i++)
+		{
+			observed[i] = new SpectralPeak(kept[i].Frame, kept[i].Bin, kept[i].Power);
+		}
+
+		PeakObserver.OnPeaks(observed);
+	}
+
 	/// <summary>Ties between equal peaks go to the earlier position in (frame, bin) order, so a plateau yields exactly one peak.</summary>
 	internal static bool NeighbourIsEarlier(int frameOffset, int neighbourBin, int bin) =>
 		frameOffset < 0 || (frameOffset == 0 && neighbourBin < bin);
@@ -332,6 +351,7 @@ public sealed class Fingerprinter : IFingerprinter
 
 		var keptSpan = span[..kept];
 		keptSpan.Sort(ByFrameThenBin);
+		NotifyObserver(keptSpan);
 		_peaks.AddRange(keptSpan);
 		_candidates.Clear();
 		var horizon = ((_block + 1) * _options.DensityBlockFrames) - 1;

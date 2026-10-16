@@ -10,3 +10,5 @@ exclude_paths:
   - "PanoramicData.SoundPrint.IntegrationTest/**"
   - "PanoramicData.SoundPrint.TestAudio/**"
   - "PanoramicData.SoundPrint.Benchmarks/**"
+  # The browser demo's JavaScript is thin browser glue (microphone, canvas), exercised manually.
+  - "PanoramicData.SoundPrint.Demo/wwwroot/**"

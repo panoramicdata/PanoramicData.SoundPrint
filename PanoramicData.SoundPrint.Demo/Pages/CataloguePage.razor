@@ -1,0 +1,110 @@
+@page "/catalogue"
+@implements IDisposable
+@implements IAsyncDisposable
+@inject DemoCatalogue Catalogue
+@inject IJSRuntime JS
+
+<h1>Catalogue</h1>
+<p class="lead">
+	The tracks this browser can recognise. The starting set is generated music, so there are no recordings to licence or download.
+	Add your own audio file to teach it a new track: the fingerprint is computed on this device and nothing is uploaded.
+</p>
+
+<div class="card">
+	<h3>Add a track</h3>
+	<div class="row">
+		<input type="text" placeholder="Title" @bind="title" />
+		<input type="text" placeholder="Artist" @bind="artist" />
+		<InputFile id="catalogueFile" />
+		<button @onclick="AddAsync" disabled="@busy">Fingerprint and add</button>
+	</div>
+	@if (status is not null)
+	{
+		<p class="note">@status</p>
+	}
+</div>
+
+<h2>@Catalogue.Tracks.Count tracks</h2>
+<table>
+	<thead><tr><th>Title</th><th>Artist</th><th>Source</th><th>Length</th><th>Landmarks</th><th></th></tr></thead>
+	<tbody>
+		@foreach (var track in Catalogue.Tracks)
+		{
+			<tr>
+				<td>@track.Title</td>
+				<td>@track.Artist</td>
+				<td class="note">@track.Source</td>
+				<td>@track.Seconds.ToString("0") s</td>
+				<td>@track.Landmarks.ToString("N0")</td>
+				<td><button class="secondary" @onclick="() => Catalogue.Remove(track.Id)">Remove</button></td>
+			</tr>
+		}
+	</tbody>
+</table>
+
+@code {
+	private IJSObjectReference? module;
+	private string title = string.Empty;
+	private string artist = string.Empty;
+	private string? status;
+	private bool busy;
+
+	protected override async Task OnInitializedAsync()
+	{
+		Catalogue.Changed += OnChanged;
+		if (!Catalogue.Seeded)
+		{
+			await Catalogue.SeedAsync();
+		}
+	}
+
+	private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+	private async Task AddAsync()
+	{
+		busy = true;
+		status = "Decoding...";
+		try
+		{
+			module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+			var decoded = await module.InvokeAsync<DecodedAudio?>("decodeFile", "catalogueFile");
+			if (decoded is null)
+			{
+				status = "Choose a file first.";
+				return;
+			}
+
+			var samples = new float[decoded.Pcm.Length / 2];
+			for (var i = 0; i < samples.Length; i++)
+			{
+				samples[i] = BitConverter.ToInt16(decoded.Pcm, i * 2) / 32768f;
+			}
+
+			status = "Fingerprinting...";
+			var name = string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(decoded.Name) : title;
+			var track = await Catalogue.AddAsync(name, string.IsNullOrWhiteSpace(artist) ? "Unknown artist" : artist, samples, decoded.Rate);
+			status = $"Added {track.Title}: {track.Landmarks:N0} landmarks.";
+			title = artist = string.Empty;
+		}
+		catch (JSException ex)
+		{
+			status = "That file could not be decoded: " + ex.Message;
+		}
+		finally
+		{
+			busy = false;
+		}
+	}
+
+	public void Dispose() => Catalogue.Changed -= OnChanged;
+
+	async ValueTask IAsyncDisposable.DisposeAsync()
+	{
+		if (module is not null)
+		{
+			await module.DisposeAsync();
+		}
+	}
+
+	private sealed record DecodedAudio(string Name, int Rate, byte[] Pcm);
+}

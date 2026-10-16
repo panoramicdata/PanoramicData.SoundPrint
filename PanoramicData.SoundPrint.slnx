@@ -20,6 +20,7 @@
 	<Project Path="PanoramicData.SoundPrint.Postgres/PanoramicData.SoundPrint.Postgres.csproj" />
 	<Project Path="PanoramicData.SoundPrint.Test/PanoramicData.SoundPrint.Test.csproj" />
 	<Project Path="PanoramicData.SoundPrint.IntegrationTest/PanoramicData.SoundPrint.IntegrationTest.csproj" />
+	<Project Path="PanoramicData.SoundPrint.Demo/PanoramicData.SoundPrint.Demo.csproj" />
 	<Project Path="PanoramicData.SoundPrint.TestAudio/PanoramicData.SoundPrint.TestAudio.csproj" />
 	<Project Path="PanoramicData.SoundPrint.Benchmarks/PanoramicData.SoundPrint.Benchmarks.csproj" />
 </Solution>

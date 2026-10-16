@@ -1,0 +1,258 @@
+@page "/explain"
+@implements IAsyncDisposable
+@inject DemoCatalogue Catalogue
+@inject IJSRuntime JS
+
+<h1>How it works</h1>
+<p class="lead">
+	Pick a catalogue track and watch it become a fingerprint, then see why a short clip finds its way home.
+</p>
+
+<SeedGate>
+
+<div class="row">
+	<select @bind="TrackId">
+		@foreach (var track in Catalogue.Tracks.Where(t => t.Samples is not null))
+		{
+			<option value="@track.Id">@track.Title</option>
+		}
+	</select>
+	<button @onclick="FingerprintAsync">Fingerprint the first @shownSeconds seconds</button>
+</div>
+
+@if (error is not null)
+{
+	<div class="card"><pre style="white-space:pre-wrap;color:var(--bad)">@error</pre></div>
+}
+
+<canvas id="explainCanvas" width="1000" height="320"></canvas>
+<p class="note">Blue dots are spectral peaks (time across, frequency up). Green lines join an anchor peak to its partner: each line becomes one landmark hash.</p>
+
+@if (peakCount > 0)
+{
+	<div class="grid" style="margin-top:1rem">
+		<div class="card"><div class="stat">@peakCount</div><p>peaks kept in @shownSeconds s</p></div>
+		<div class="card"><div class="stat">@landmarkCount</div><p>landmarks (pairs) produced</p></div>
+		<div class="card"><div class="stat">@((landmarkCount / (double)shownSeconds).ToString("0"))</div><p>landmarks per second of audio</p></div>
+	</div>
+
+	<h2>A few landmarks</h2>
+	<table>
+		<thead><tr><th>Anchor</th><th>Partner</th><th>Hash (32-bit)</th><th>What it encodes</th></tr></thead>
+		<tbody>
+			@foreach (var sample in samples)
+			{
+				<tr>
+					<td>@sample.AnchorTime s, @sample.AnchorHz Hz</td>
+					<td>@sample.PartnerTime s, @sample.PartnerHz Hz</td>
+					<td class="mono">0x@(sample.Hash.ToString("X8"))</td>
+					<td class="note">anchor bin @sample.AnchorBin, &Delta;bin @sample.DeltaBin, &Delta;t @sample.DeltaFrames frames</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+<h2>Why a short clip finds its way home</h2>
+<p class="lead">
+	Take a clip, fingerprint it, and look up every hash. Each hit votes for the time offset between the clip and the track.
+	Coincidental hits scatter across offsets; the true match piles its votes onto one.
+</p>
+<div class="row">
+	<label>Clip starts at <strong>@clipStart</strong> s</label>
+	<input type="range" min="0" max="30" step="1" @bind="clipStart" @bind:event="oninput" />
+	<button class="secondary" @onclick="VoteAsync">Vote</button>
+</div>
+
+@if (histogram.Count > 0)
+{
+	<div class="hist">
+		@foreach (var bar in histogram)
+		{
+			<div class="@(bar.IsPeak ? "peak" : "")" style="height:@(bar.Height)%" title="offset @bar.Offset s: @bar.Votes votes"></div>
+		}
+	</div>
+	<p class="note">
+		Votes by offset for the chosen track (clip length 6 s). The tall green bar is at @bestOffset s with @bestVotes votes,
+		which is where the clip really starts. The other bars are chance.
+	</p>
+}
+
+</SeedGate>
+
+@code {
+	private const int shownSeconds = 12;
+	private IJSObjectReference? module;
+	private string? trackId;
+
+	private string? TrackId
+	{
+		get => trackId ?? Catalogue.Tracks.FirstOrDefault(t => t.Samples is not null)?.Id;
+		set => trackId = value;
+	}
+	private int clipStart = 8;
+	private int peakCount;
+	private int landmarkCount;
+	private double bestOffset;
+	private int bestVotes;
+	private List<SampleLandmark> samples = [];
+	private List<Bar> histogram = [];
+	private bool autoRan;
+	private string? error;
+
+	/// <summary>When set in the address (explain?auto=1), runs both demonstrations as soon as the catalogue is ready, so the page can be linked to or captured.</summary>
+	[SupplyParameterFromQuery]
+	public bool Auto { get; set; }
+
+	protected override void OnInitialized() => Catalogue.Changed += OnCatalogueChanged;
+
+	private void OnCatalogueChanged() => _ = InvokeAsync(StateHasChanged);
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (Auto && !autoRan && Catalogue.Seeded)
+		{
+			autoRan = true;
+			try
+			{
+				await FingerprintAsync();
+				await VoteAsync();
+			}
+			catch (Exception ex)
+			{
+				error = ex.ToString();
+			}
+
+			StateHasChanged();
+		}
+	}
+
+	private async Task<IJSObjectReference> ModuleAsync() => module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+
+	private sealed class Collector : IPeakObserver
+	{
+		public List<SpectralPeak> Peaks { get; } = [];
+		public void OnPeaks(ReadOnlySpan<SpectralPeak> peaks) => Peaks.AddRange(peaks);
+	}
+
+	private async Task FingerprintAsync()
+	{
+		var track = Catalogue.Find(TrackId ?? string.Empty);
+		if (track?.Samples is null)
+		{
+			return;
+		}
+
+		var options = Catalogue.Options;
+		var audio = track.Samples.AsSpan(0, DemoCatalogue.SampleRate * shownSeconds).ToArray();
+		var collector = new Collector();
+		var fingerprinter = new Fingerprinter(DemoCatalogue.SampleRate, options) { PeakObserver = collector };
+		var sink = new ListLandmarkSink();
+		fingerprinter.Push(audio, sink);
+		fingerprinter.Flush(sink);
+
+		var landmarks = sink.Landmarks;
+		peakCount = collector.Peaks.Count;
+		landmarkCount = landmarks.Count;
+		var maxFrame = (int)(shownSeconds * 1000 / options.FrameDuration.TotalMilliseconds);
+
+		var peaks = new List<int>();
+		foreach (var p in collector.Peaks)
+		{
+			peaks.Add(p.Frame);
+			peaks.Add(p.Bin);
+		}
+
+		var pairs = new List<int>();
+		samples = [];
+		for (var i = 0; i < landmarks.Count; i += Math.Max(1, landmarks.Count / 60))
+		{
+			var l = landmarks[i];
+			var anchorBin = (int)((l.Hash >> 14) & 0x1FF);
+			var deltaBin = (int)((l.Hash >> 6) & 0xFF) - 128;
+			pairs.Add(l.AnchorFrame);
+			pairs.Add(anchorBin);
+			pairs.Add(l.AnchorFrame + l.DeltaFrames);
+			pairs.Add(anchorBin + deltaBin);
+			if (samples.Count < 6)
+			{
+				samples.Add(new SampleLandmark(
+					l.Hash,
+					anchorBin,
+					deltaBin,
+					l.DeltaFrames,
+					(l.AnchorFrame * options.FrameDuration.TotalSeconds).ToString("0.00"),
+					(anchorBin * (double)options.SampleRate / options.WindowSize).ToString("0"),
+					((l.AnchorFrame + l.DeltaFrames) * options.FrameDuration.TotalSeconds).ToString("0.00"),
+					((anchorBin + deltaBin) * (double)options.SampleRate / options.WindowSize).ToString("0")));
+			}
+		}
+
+		await (await ModuleAsync()).InvokeVoidAsync("drawConstellation", "explainCanvas", peaks, pairs, maxFrame, options.BinCount);
+	}
+
+	private sealed class OffsetCollector : IHitSink
+	{
+		public List<(int Track, int Offset)> Hits { get; } = [];
+		public void Add(int trackIndex, int trackFrame, Landmark queryLandmark) => Hits.Add((trackIndex, trackFrame - queryLandmark.AnchorFrame));
+	}
+
+	private Task VoteAsync()
+	{
+		var track = Catalogue.Find(TrackId ?? string.Empty);
+		if (track?.Samples is null)
+		{
+			return Task.CompletedTask;
+		}
+
+		var options = Catalogue.Options;
+		var clip = track.Samples.AsSpan(clipStart * DemoCatalogue.SampleRate, 6 * DemoCatalogue.SampleRate).ToArray();
+		var query = Fingerprinter.Fingerprint(clip, DemoCatalogue.SampleRate, options);
+		var collector = new OffsetCollector();
+		Catalogue.Store.Lookup(query, collector);
+
+		var indexes = collector.Hits.Select(h => h.Track).Distinct().ToList();
+		var ids = Catalogue.Store.ResolveTrackIds(indexes);
+		var wanted = indexes.Where(i => ids[indexes.IndexOf(i)] == track.Id).ToHashSet();
+		var offsets = collector.Hits.Where(h => wanted.Contains(h.Track)).Select(h => h.Offset).ToList();
+		if (offsets.Count == 0)
+		{
+			histogram = [];
+			return Task.CompletedTask;
+		}
+
+		var frameSeconds = options.FrameDuration.TotalSeconds;
+		var range = offsets.Max() - offsets.Min() + 1;
+		var binWidth = Math.Max(2, (int)Math.Ceiling(range / 140.0));
+		var min = offsets.Min() / binWidth;
+		var max = offsets.Max() / binWidth;
+		var counts = new int[max - min + 1];
+		foreach (var offset in offsets)
+		{
+			counts[(offset / binWidth) - min]++;
+		}
+
+		var top = counts.Max();
+		histogram = [.. counts.Select((votes, i) => new Bar(
+			Math.Max(1, votes * 100 / Math.Max(1, top)),
+			votes,
+			Math.Round(((i + min) * binWidth) * frameSeconds, 1),
+			votes == top))];
+		bestVotes = top;
+		bestOffset = histogram.First(b => b.IsPeak).Offset;
+		return Task.CompletedTask;
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		Catalogue.Changed -= OnCatalogueChanged;
+		if (module is not null)
+		{
+			await module.DisposeAsync();
+		}
+	}
+
+	private sealed record SampleLandmark(uint Hash, int AnchorBin, int DeltaBin, int DeltaFrames, string AnchorTime, string AnchorHz, string PartnerTime, string PartnerHz);
+
+	private sealed record Bar(int Height, int Votes, double Offset, bool IsPeak);
+}

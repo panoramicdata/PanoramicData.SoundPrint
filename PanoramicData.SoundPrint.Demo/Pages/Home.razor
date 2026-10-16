@@ -1,0 +1,66 @@
+@page "/"
+@implements IDisposable
+@inject DemoCatalogue Catalogue
+
+<h1>Name that tune, without sending a single sample anywhere.</h1>
+<p class="lead">
+	SoundPrint turns audio into a compact fingerprint of its loudest spectral peaks, then finds which known track a few seconds of sound belongs to,
+	where in the track it is, and how sure it is. This page runs the whole thing in your browser.
+</p>
+
+@if (!Catalogue.Seeded)
+{
+	<div class="card">
+		<h3>Preparing the demo catalogue</h3>
+		<p>Generating @total songs in your browser and fingerprinting them. No recordings are downloaded.</p>
+		<progress max="@total" value="@done"></progress>
+	</div>
+}
+else
+{
+	<div class="grid">
+		<div class="card"><div class="stat">@Catalogue.Tracks.Count</div><p>tracks in the catalogue</p></div>
+		<div class="card"><div class="stat">@Catalogue.LandmarkCount.ToString("N0")</div><p>landmarks stored</p></div>
+		<div class="card"><div class="stat">@(Catalogue.Options.SampleRate / 1000.0) kHz</div><p>internal sample rate</p></div>
+		<div class="card"><div class="stat">@Catalogue.Options.FrameDuration.TotalMilliseconds.ToString("0") ms</div><p>analysis frame</p></div>
+	</div>
+
+	<h2>Try it</h2>
+	<div class="grid">
+		<div class="card">
+			<h3><a href="identify">Identify</a></h3>
+			<p>Play a catalogue track from your speakers and let the microphone name it, or drop in an audio file. Watch the spectral constellation build as it listens.</p>
+		</div>
+		<div class="card">
+			<h3><a href="explain">How it works</a></h3>
+			<p>See the peaks, the landmark pairs and the offset histogram whose spike gives the answer.</p>
+		</div>
+		<div class="card">
+			<h3><a href="catalogue">Catalogue</a></h3>
+			<p>Browse the tracks, or add your own audio file: it is fingerprinted on this device and never uploaded.</p>
+		</div>
+	</div>
+}
+
+@code {
+	private int done;
+	private int total = 8;
+
+	protected override async Task OnInitializedAsync()
+	{
+		Catalogue.Changed += OnChanged;
+		if (!Catalogue.Seeded)
+		{
+			await Catalogue.SeedAsync(new Progress<(int Done, int Total)>(p =>
+			{
+				done = p.Done;
+				total = p.Total;
+				StateHasChanged();
+			}));
+		}
+	}
+
+	private void OnChanged() => InvokeAsync(StateHasChanged);
+
+	public void Dispose() => Catalogue.Changed -= OnChanged;
+}

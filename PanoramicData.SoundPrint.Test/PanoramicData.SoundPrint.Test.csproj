@@ -30,6 +30,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\PanoramicData.SoundPrint\PanoramicData.SoundPrint.csproj" />
 		<ProjectReference Include="..\PanoramicData.SoundPrint.TestAudio\PanoramicData.SoundPrint.TestAudio.csproj" />
+		<ProjectReference Include="..\PanoramicData.SoundPrint.Demo\PanoramicData.SoundPrint.Demo.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

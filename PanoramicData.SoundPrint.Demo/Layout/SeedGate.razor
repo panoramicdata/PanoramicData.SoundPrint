@@ -1,0 +1,41 @@
+@implements IDisposable
+@inject DemoCatalogue Catalogue
+
+@if (Catalogue.Seeded)
+{
+	@ChildContent
+}
+else
+{
+	<div class="card">
+		<h3>Preparing the demo catalogue</h3>
+		<p>Generating @total songs in your browser and fingerprinting them. No recordings are downloaded.</p>
+		<progress max="@total" value="@done"></progress>
+	</div>
+}
+
+@code {
+	private int done;
+	private int total = 8;
+
+	[Parameter]
+	public RenderFragment? ChildContent { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		Catalogue.Changed += OnChanged;
+		if (!Catalogue.Seeded)
+		{
+			await Catalogue.SeedAsync(new Progress<(int Done, int Total)>(p =>
+			{
+				done = p.Done;
+				total = p.Total;
+				StateHasChanged();
+			}));
+		}
+	}
+
+	private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+	public void Dispose() => Catalogue.Changed -= OnChanged;
+}
