@@ -277,7 +277,7 @@ public sealed class Fingerprinter : IFingerprinter
 
 				var neighbour = row[other2];
 				// Ties go to the earlier position, so a plateau yields exactly one peak.
-				if (neighbour > value || (neighbour == value && (dt < 0 || (dt == 0 && other2 < bin))))
+				if (neighbour > value || (neighbour == value && NeighbourIsEarlier(dt, other2, bin)))
 				{
 					return false;
 				}
@@ -286,6 +286,10 @@ public sealed class Fingerprinter : IFingerprinter
 
 		return true;
 	}
+
+	/// <summary>Ties between equal peaks go to the earlier position in (frame, bin) order, so a plateau yields exactly one peak.</summary>
+	internal static bool NeighbourIsEarlier(int frameOffset, int neighbourBin, int bin) =>
+		frameOffset < 0 || (frameOffset == 0 && neighbourBin < bin);
 
 	private void FinalizeBlock()
 	{

@@ -272,6 +272,64 @@ public class FingerprinterTests
 	}
 
 	[Fact]
+	public void PeriodicSignal_WithIdenticalFrames_YieldsDeterministicPlateauPeaks()
+	{
+		// Period equals the hop, so every frame is identical and peaks tie across time; ties must resolve identically each run.
+		var x = new float[8000 * 5];
+		for (var i = 0; i < x.Length; i++)
+		{
+			x[i] = (((i % 256) / 255f) * 2) - 1;
+		}
+
+		var first = Fingerprinter.Fingerprint(x, 8000);
+		first.Should().Equal(Fingerprinter.Fingerprint(x, 8000));
+	}
+
+	[Theory]
+	[InlineData(-1, 0, 5, true)]
+	[InlineData(1, 0, 5, false)]
+	[InlineData(0, 4, 5, true)]
+	[InlineData(0, 5, 5, false)]
+	[InlineData(0, 6, 5, false)]
+	public void NeighbourIsEarlier_OrdersByFrameThenBin(int frameOffset, int neighbourBin, int bin, bool expected) =>
+		Fingerprinter.NeighbourIsEarlier(frameOffset, neighbourBin, bin).Should().Be(expected);
+
+	[Fact]
+	public void TonePairs_FarApartInFrequency_AreNotPairedAcrossTheDeltaRange()
+	{
+		// A 3 kHz tone then a 300 Hz tone: the frequency delta exceeds the 8-bit range in both directions, so such pairs are skipped.
+		var x = new float[8000 * 6];
+		for (var i = 0; i < x.Length; i++)
+		{
+			var t = (double)i / 8000;
+			var f = (i / 4000) % 2 == 0 ? 3000.0 : 300.0;
+			x[i] = (float)Math.Sin(2 * Math.PI * f * t);
+		}
+
+		var landmarks = Fingerprinter.Fingerprint(x, 8000);
+		foreach (var landmark in landmarks)
+		{
+			var deltaBins = (int)((landmark.Hash >> 6) & 0xFF) - 128;
+			deltaBins.Should().BeInRange(-128, 127);
+		}
+	}
+
+	[Fact]
+	public void ToneBetweenTwoBins_ResolvesTiesInFrequencyDeterministically()
+	{
+		// 8000/1024 Hz per bin, so 100.5 bins puts equal power in two neighbouring bins.
+		var frequency = 100.5 * 8000 / 1024;
+		var x = new float[8000 * 4];
+		for (var i = 0; i < x.Length; i++)
+		{
+			x[i] = (float)Math.Sin(2 * Math.PI * frequency * i / 8000);
+		}
+
+		var landmarks = Fingerprinter.Fingerprint(x, 8000);
+		landmarks.Should().Equal(Fingerprinter.Fingerprint(x, 8000));
+	}
+
+	[Fact]
 	public void CustomOptions_ChangeTheOutput()
 	{
 		var song = Song(23);

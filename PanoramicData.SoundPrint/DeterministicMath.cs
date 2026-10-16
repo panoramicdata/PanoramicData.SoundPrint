@@ -22,13 +22,17 @@ internal static class DeterministicMath
 		var k = Math.Round(x * TwoOverPi);
 		var r = x - (k * PiOver2High) - (k * PiOver2Low);
 		var quadrant = (((long)k + quadrantShift) % 4 + 4) % 4;
-		return quadrant switch
+		if (quadrant == 0)
 		{
-			0 => SinPoly(r),
-			1 => CosPoly(r),
-			2 => -SinPoly(r),
-			_ => -CosPoly(r)
-		};
+			return SinPoly(r);
+		}
+
+		if (quadrant == 1)
+		{
+			return CosPoly(r);
+		}
+
+		return quadrant == 2 ? -SinPoly(r) : -CosPoly(r);
 	}
 
 	// Taylor series on |r| <= pi/4, where the truncation error is below 1e-19.

@@ -112,6 +112,23 @@ public class MatcherTests(MatcherFixture fixture) : IClassFixture<MatcherFixture
 		(await fixture.Matcher.RunAsync(fixture.Query(new float[MatcherFixture.Rate * 5]))).Should().BeEmpty();
 
 	[Fact]
+	public async Task LargeQuery_WithMoreThanTheInitialBufferOfHits_StillMatches()
+	{
+		// A long recording of one song against a store holding it produces far more than 4096 hits.
+		var long90 = SyntheticSong.Generate(321, 90, MatcherFixture.Rate);
+		using var store = new InMemoryFingerprintStore(fixture.Options);
+		var landmarks = fixture.Query(long90);
+		store.AddTrack("long", landmarks);
+		var matcher = new Matcher(store);
+
+		landmarks.Count.Should().BeGreaterThan(4096);
+		var matches = await matcher.RunAsync(landmarks);
+
+		matches[0].TrackId.Should().Be("long");
+		matches[0].Votes.Should().BeGreaterThan(4096);
+	}
+
+	[Fact]
 	public async Task EmptyQuery_MatchesNothing() =>
 		(await fixture.Matcher.RunAsync([])).Should().BeEmpty();
 
@@ -258,6 +275,7 @@ public class MatchOptionsTests
 		{ "OffsetToleranceFrames", new MatchOptions { OffsetToleranceFrames = -1 } },
 		{ "SuppressionFrames", new MatchOptions { SuppressionFrames = 0 } },
 		{ "MaxMatches", new MatchOptions { MaxMatches = 0 } },
+		{ "MinConfidence", new MatchOptions { MinConfidence = -0.1 } },
 		{ "MinConfidence", new MatchOptions { MinConfidence = 1.5 } },
 		{ "MinBackground", new MatchOptions { MinBackground = 0 } },
 		{ "ConfidenceMidpoint", new MatchOptions { ConfidenceMidpoint = double.NaN } },
