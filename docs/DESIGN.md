@@ -241,3 +241,28 @@ issues (identifying copyrighted music, and the database holding derived data) ar
 1. Target database scale, which drives how hard to tune storage (section 8).
 2. 8 kHz versus 11.025 kHz internal rate: default 8 kHz, to be confirmed by benchmark.
 3. Codacy: the repository needs the `CODACY_PROJECT_TOKEN` secret before coverage can reach Codacy (see the Phase 1 report).
+
+## 12. As built: deviations from this note
+
+The design above was approved at Checkpoint A. Implementation changed these details; the code and README are authoritative.
+
+- **Streaming lag** is up to about three seconds, not 1.1 s: a peak needs three frames of lookahead, a one-second density block must complete,
+  and an anchor waits until its whole two-second target zone is known.
+- **Frame origin.** There is no `ResetFrameOrigin`. A stream's frames are numbered from zero as an `int`, which lasts about two years at
+  31.25 frames per second; the extractor throws on overflow and `Reset()` restarts numbering. A consumer running longer starts a new
+  fingerprinter (and a new `RollingLandmarkWindow`) at a convenient quiet moment.
+- **Store interface is asynchronous** (`ValueTask`, with a `CancellationToken` on every call) so that a database store is not blocked on
+  I/O. Hits are delivered to an `IHitSink` as (track index, track frame, query landmark); track indexes are resolved to ids in one
+  extra call for the few tracks that matched. `InMemoryFingerprintStore` also offers synchronous methods.
+- **Parameter fingerprint is per store, not per track.** A store records the fingerprint of the options it was built with
+  (`store_info` table in PostgreSQL), and a matcher refuses a store whose fingerprint differs from its own options.
+- **Match** carries `Votes` and `Score` as well as `Confidence`, and has `TrackStart` / `TrackEnd` helpers.
+  `OffsetInTrack` is track time minus query time and is negative when the query began before the track did.
+- **Scoring.** The score is the negative base-10 logarithm of a Poisson tail probability: the votes in the winning offset window
+  against the level expected from the other hits on the same track. Confidence is a logistic function of that score whose two
+  parameters are fitted by the benchmark harness (see the README for the fitted values and the recommended threshold).
+- **Default minimum confidence is 0.5**, which drops the weak secondary peaks that repetitive music produces; matches the caller
+  wants to see below that can be requested with `MatchOptions.MinConfidence`.
+- **Rolling window.** `RollingLandmarkWindow` is a ready-made sink that keeps the most recent N seconds of a live stream for matching.
+- **Deterministic maths.** Window, FFT and resampler tables are built with `DeterministicMath` (sine and cosine from IEEE basic
+  operations) instead of `Math.Sin`, so extraction is bit-identical across platforms; a golden-hash test pins this.
