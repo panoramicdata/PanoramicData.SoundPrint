@@ -98,7 +98,7 @@ What to know:
 - `InitializeAsync` creates `tracks`, `fingerprints` and `store_info`, and refuses a database built with different fingerprint parameters (`InvalidOperationException`).
 - A track is added in one transaction: a per-track advisory lock, delete of any existing copy, insert, binary `COPY`. Concurrent writes to the same id are serialised; writes to different ids run in parallel.
 - Lookups batch the distinct query hashes into index-only scans and are safe to run concurrently.
-- Size is about 30 to 35 bytes per landmark including indexes; see BENCHMARKS.md for measured figures and for latency against a large database.
+- Size measured at about 92 bytes per landmark including both indexes (about 55 MB per hour of real music); see BENCHMARKS.md for measured figures and for latency against a large database.
 - Run `VACUUM ANALYZE fingerprints` after a large bulk load so the planner and the visibility map are current (index-only scans depend on it).
 
 ## Choosing a confidence threshold

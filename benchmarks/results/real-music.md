@@ -1,8 +1,8 @@
 # Real-music results (Free Music Archive, Creative Commons)
 
-Generated 2026-10-16 13:54 UTC by `dotnet run -c Release --project PanoramicData.SoundPrint.Benchmarks -- real --source fma`.
+Generated 2026-10-16 15:39 UTC by `dotnet run -c Release --project PanoramicData.SoundPrint.Benchmarks -- real --source fma`.
 
-Database: 480 real tracks of 29 s (3.87 hours) decoded to 22050 Hz mono and fingerprinted at 8000 Hz; 120 further tracks held out as absent queries. 300 queries per cell. Re-encode and chain scenarios use 120 tracks. Source and licences: benchmarks/SOURCES.md. Audio stays local and is not committed.
+Database: 480 real tracks of 29 s (3.87 hours) decoded to 22050 Hz mono and fingerprinted at 11025 Hz; 120 further tracks held out as absent queries. The real tracks produce 165 landmarks per second of audio at the default options. 300 queries per cell. Re-encode and chain scenarios use 120 tracks. Source and licences: benchmarks/SOURCES.md. Audio stays local and is not committed.
 
 ## Confidence calibration and threshold
 
@@ -36,10 +36,10 @@ Position accuracy: of the queries of 5 s or longer whose track was identified ab
 
 | Query length | Median ms | 95th percentile ms |
 |---|---|---|
-| 3 s | 0.59 | 1.35 |
-| 5 s | 1.01 | 2.72 |
-| 7 s | 1.44 | 4.04 |
-| 10 s | 2.08 | 9.93 |
+| 3 s | 0.69 | 2.04 |
+| 5 s | 1.19 | 4.18 |
+| 7 s | 1.65 | 7.97 |
+| 10 s | 2.38 | 20.21 |
 
 ## Clips straddling two songs (10 s window, boundary 2.5 to 7.5 s in)
 
@@ -49,4 +49,4 @@ A trial succeeds when both songs are identified at the right positions, in the r
 |---|---|---|---|
 | hard cut | 98.0% | 0.06 s | 0.17 s |
 | 1 s crossfade | 98.5% | 0.16 s | 0.41 s |
-| hard cut after radio processing | 98.5% | 0.06 s | 0.19 s |
+| hard cut after radio processing | 98.0% | 0.06 s | 0.19 s |

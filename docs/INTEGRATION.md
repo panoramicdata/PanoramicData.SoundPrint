@@ -60,7 +60,7 @@ Because ids are yours, a correction can also be pure metadata on your side (the 
 
 ## Capacity planning
 
-- Real music produced about 100 to 125 landmarks per second of audio at the defaults; a 24-hour station adds roughly 9 to 11 million landmarks a day if every second were added, but you only add distinct songs. A typical station's rotation is a few thousand songs, which is a database of tens of millions of landmarks: comfortable in memory (about 16 bytes per landmark) or in PostgreSQL.
+- Real music produced about 165 landmarks per second of audio at the defaults (synthetic music about 120). A 24-hour station would add roughly 14 million landmarks a day if every second were added, but you only add distinct songs. A typical station's rotation is a few thousand songs, which is a database of tens of millions of landmarks: comfortable in memory (about 16 bytes per landmark, so a 3,000-song rotation of 3.5 minutes is roughly 1.7 GB) or in PostgreSQL (about 92 bytes per landmark, roughly 10 GB for the same rotation).
 - See [BENCHMARKS.md](BENCHMARKS.md) for measured match latency against very large databases and for storage per hour of audio.
 
 ## Versioning
