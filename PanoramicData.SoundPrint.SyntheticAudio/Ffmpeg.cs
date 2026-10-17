@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>
 /// Lossy re-encoding through a locally installed ffmpeg. The tests that need it fail, with a message saying what is missing,

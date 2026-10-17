@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Npgsql;
 using PanoramicData.SoundPrint.Postgres;
-using PanoramicData.SoundPrint.TestAudio;
+using PanoramicData.SoundPrint.SyntheticAudio;
 
 namespace PanoramicData.SoundPrint.Benchmarks;
 

@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>
 /// A synthetic stand-in for a presenter's voice: a glottal pulse train with a wandering pitch, shaped by three formant resonators,

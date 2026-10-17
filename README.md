@@ -186,7 +186,7 @@ Quality: the core library has 100% line and branch coverage from the unit tests 
 | `PanoramicData.SoundPrint.Postgres` | PostgreSQL store and migrations |
 | `PanoramicData.SoundPrint.Test` | Unit tests |
 | `PanoramicData.SoundPrint.IntegrationTest` | PostgreSQL integration tests (Testcontainers) |
-| `PanoramicData.SoundPrint.TestAudio` | Synthetic music and speech, degradations, ffmpeg wrapper |
+| `PanoramicData.SoundPrint.SyntheticAudio` | Synthetic music and speech, degradations, ffmpeg wrapper |
 | `PanoramicData.SoundPrint.Benchmarks` | Accuracy, tuning, latency, speed and real-music runners |
 | `PanoramicData.SoundPrint.Demo` | Blazor WebAssembly demo |
 

@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>
 /// Deterministic synthetic "songs" for tests and benchmarks: a chord pad, a melody, a bass line and drums, with tempo, key, scale,

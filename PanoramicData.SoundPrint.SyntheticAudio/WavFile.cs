@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>Minimal 16-bit mono PCM WAV writer, used to hand audio to ffmpeg.</summary>
 public static class WavFile

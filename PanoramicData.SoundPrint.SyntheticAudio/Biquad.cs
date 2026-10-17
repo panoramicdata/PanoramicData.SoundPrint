@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>A biquad filter with coefficients from the Audio EQ Cookbook (Robert Bristow-Johnson).</summary>
 public sealed class Biquad

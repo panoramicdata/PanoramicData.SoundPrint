@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>Signal degradations typical of broadcast chains, used to measure how robust matching is.</summary>
 public static class Degradations

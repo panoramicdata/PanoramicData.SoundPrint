@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using PanoramicData.SoundPrint.TestAudio;
+using PanoramicData.SoundPrint.SyntheticAudio;
 
 namespace PanoramicData.SoundPrint.Benchmarks;
 

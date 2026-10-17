@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using PanoramicData.SoundPrint.Postgres;
-using PanoramicData.SoundPrint.TestAudio;
+using PanoramicData.SoundPrint.SyntheticAudio;
 
 namespace PanoramicData.SoundPrint.IntegrationTest;
 

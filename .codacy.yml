@@ -8,7 +8,9 @@ exclude_paths:
   # rules flag as weak randomness and injection.
   - "PanoramicData.SoundPrint.Test/**"
   - "PanoramicData.SoundPrint.IntegrationTest/**"
-  - "PanoramicData.SoundPrint.TestAudio/**"
+  - "PanoramicData.SoundPrint.SyntheticAudio/**"
   - "PanoramicData.SoundPrint.Benchmarks/**"
   # The browser demo's JavaScript is thin browser glue (microphone, canvas), exercised manually.
   - "PanoramicData.SoundPrint.Demo/wwwroot/**"
+  # The browser demo is a sample application whose services are exercised by unit tests; its UI is Razor markup and JavaScript.
+  - "PanoramicData.SoundPrint.Demo/**"

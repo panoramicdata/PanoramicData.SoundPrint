@@ -20,7 +20,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\PanoramicData.SoundPrint\PanoramicData.SoundPrint.csproj" />
 		<ProjectReference Include="..\PanoramicData.SoundPrint.Postgres\PanoramicData.SoundPrint.Postgres.csproj" />
-		<ProjectReference Include="..\PanoramicData.SoundPrint.TestAudio\PanoramicData.SoundPrint.TestAudio.csproj" />
+		<ProjectReference Include="..\PanoramicData.SoundPrint.SyntheticAudio\PanoramicData.SoundPrint.SyntheticAudio.csproj" />
 	</ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using PanoramicData.SoundPrint.TestAudio;
+using PanoramicData.SoundPrint.SyntheticAudio;
 
 namespace PanoramicData.SoundPrint.Benchmarks;
 
@@ -158,7 +158,7 @@ internal static class AccuracyRunner
 				var fade = (int)(crossfade * rate);
 				var firstSamples = (int)(boundary * rate) + (fade / 2);
 				var secondSamples = (int)(windowSeconds * rate) - (int)(boundary * rate) + (fade / 2);
-				var spliced = TestAudio.Degradations.Splice(songs[a].AsSpan((int)(startA * rate)), songs[b].AsSpan((int)((startB * rate) - (fade / 2.0))), firstSamples, fade, secondSamples);
+				var spliced = SyntheticAudio.Degradations.Splice(songs[a].AsSpan((int)(startA * rate)), songs[b].AsSpan((int)((startB * rate) - (fade / 2.0))), firstSamples, fade, secondSamples);
 				var matches = corpus.Matcher.MatchAsync(Fingerprinter.Fingerprint(spliced, rate, config.Options)).AsTask().GetAwaiter().GetResult();
 				var matchA = matches.FirstOrDefault(m => m.TrackId == Corpus.TrackId(a) && Math.Abs(m.OffsetInTrack.TotalSeconds - startA) <= PositionToleranceSeconds);
 				var matchB = matches.FirstOrDefault(m => m.TrackId == Corpus.TrackId(b) && Math.Abs(m.OffsetInTrack.TotalSeconds - (startB - boundary)) <= PositionToleranceSeconds);

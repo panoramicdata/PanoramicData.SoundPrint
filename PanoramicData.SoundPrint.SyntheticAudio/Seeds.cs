@@ -1,4 +1,4 @@
-namespace PanoramicData.SoundPrint.TestAudio;
+namespace PanoramicData.SoundPrint.SyntheticAudio;
 
 /// <summary>
 /// Deterministic seed mixing. <see cref="HashCode.Combine{T1, T2}(T1, T2)"/> is randomised per process, which would make "the same seed"
