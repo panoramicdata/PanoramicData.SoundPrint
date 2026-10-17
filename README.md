@@ -17,7 +17,7 @@ Give it a few seconds of sound and it tells you **which known track it is, where
 - **Yours.** Written from the published landmark-hashing literature and first principles, MIT licensed, no native dependencies and no decoding: you pass mono PCM.
 - **Deterministic.** The same audio produces bit-identical fingerprints however it is chunked; a golden-hash test passes on both Windows and the Linux CI runner.
 
-> **Try it in your browser:** a Blazor WebAssembly demo runs the whole library locally (microphone, files, and a visual explanation of how it works). See [docs/DEMO.md](docs/DEMO.md).
+> **Try it in your browser:** https://soundprint.panoramicdata.com is a Blazor WebAssembly demo that runs the whole library locally (microphone, files, and a visual explanation of how it works). See [docs/DEMO.md](docs/DEMO.md).
 
 ## Contents
 

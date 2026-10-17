@@ -1,0 +1,54 @@
+name: Demo site
+
+# Publishes the Blazor WebAssembly demo to the gh-pages branch, which GitHub Pages serves at https://soundprint.panoramicdata.com.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PanoramicData.SoundPrint/**'
+      - 'PanoramicData.SoundPrint.SyntheticAudio/**'
+      - 'PanoramicData.SoundPrint.Demo/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: demo-site
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Publish demo
+      run: dotnet publish PanoramicData.SoundPrint.Demo --configuration Release --output site
+
+    # GitHub Pages has no server-side routing: a copy of index.html as 404.html lets deep links such as /explain load the app.
+    # .nojekyll stops Jekyll from ignoring the _framework folder; CNAME carries the custom domain across deployments.
+    - name: Prepare Pages files
+      run: |
+        cp site/wwwroot/index.html site/wwwroot/404.html
+        touch site/wwwroot/.nojekyll
+        echo "soundprint.panoramicdata.com" > site/wwwroot/CNAME
+
+    - name: Deploy to gh-pages
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: site/wwwroot
+        branch: gh-pages
+        single-commit: true
+        clean: true
