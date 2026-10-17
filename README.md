@@ -30,7 +30,7 @@ dotnet add package PanoramicData.SoundPrint            # core library, no databa
 dotnet add package PanoramicData.SoundPrint.Postgres   # optional PostgreSQL store (EF Core)
 ```
 
-Targets .NET 10. Not yet published to NuGet: until the first release, reference the projects from this repository.
+Targets .NET 10. Current release: 1.0.1.
 
 | Package | Purpose |
 |---|---|
@@ -194,7 +194,7 @@ Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY
 
 ## Links
 
-- NuGet: https://www.nuget.org/packages/PanoramicData.SoundPrint (once published)
+- NuGet: https://www.nuget.org/packages/PanoramicData.SoundPrint 
 - Source: https://github.com/panoramicdata/PanoramicData.SoundPrint
 - Issues: https://github.com/panoramicdata/PanoramicData.SoundPrint/issues
 
