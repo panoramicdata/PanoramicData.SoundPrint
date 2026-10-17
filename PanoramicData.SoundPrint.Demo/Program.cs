@@ -8,4 +8,5 @@ builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddSingleton<DemoCatalogue>();
 builder.Services.AddScoped<IdentifySession>();
+builder.Services.AddSingleton<ExplainLab>();
 await builder.Build().RunAsync();

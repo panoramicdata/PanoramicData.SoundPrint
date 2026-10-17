@@ -129,3 +129,12 @@ code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.9e
 .note { color: var(--muted); font-size: 0.9rem; }
 select, input[type=text] { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.7rem; }
 progress { width: 100%; }
+
+.formula { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.8rem 1.1rem; font-size: 1.05rem; overflow-x: auto; }
+.hist-wrap { position: relative; }
+.hist-wrap .marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: 0.85; pointer-events: none; }
+label { color: var(--muted); }
+label strong { color: var(--text); }
+input[type=range] { vertical-align: middle; width: 14rem; margin-left: 0.5rem; }
+.steps-note { color: var(--muted); }
+h2 { margin-top: 2.4rem; }

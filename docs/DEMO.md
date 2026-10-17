@@ -22,7 +22,7 @@ and serve `artifacts/demo/wwwroot` (it is plain static content). Microphone acce
 |---|---|
 | **Overview** | Generates the starting catalogue in the browser (eight synthetic songs, about 37,000 landmarks) and shows what the library is. |
 | **Identify** | Listen through the microphone, or feed a file in as if it were a live stream. Shows the live spectrogram, the constellation of peaks in the current twelve-second window, the recognised track with its matched span, confidence and votes, and a timeline of what has been heard. A "play a catalogue track" panel lets your speakers act as the radio for the microphone. |
-| **How it works** | Fingerprints the first 12 seconds of a track and draws the peaks and landmark pairs, lists sample hashes with what each encodes, and runs a clip against the catalogue to show the offset histogram whose spike identifies the track. `explain?auto=true` runs both demonstrations on load. |
+| **How it works** | A guided, interactive lesson aimed at an A-level maths reader: the real spectrogram with labelled axes, the peaks kept and why they survive loudness changes, a clickable anchor showing its target zone and the bit fields of each hash, the offset-voting histogram for a clip you can slide through the track, and a sweep across eight frame phases showing why the sampling-phase problem does not break matching. `explain?auto=true` runs the demonstrations on load. |
 | **Catalogue** | Lists tracks and lets you add your own audio file, which is decoded and fingerprinted locally. |
 
 ## Why synthetic songs

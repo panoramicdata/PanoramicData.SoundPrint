@@ -146,3 +146,85 @@ public class DemoServicesTests
 		session.LatestFrame.Should().Be(0);
 	}
 }
+
+public class ExplainLabTests
+{
+	private static async Task<(DemoCatalogue Catalogue, CatalogueTrack Track, ExplainLab Lab)> ArrangeAsync()
+	{
+		var catalogue = new DemoCatalogue();
+		await catalogue.SeedAsync();
+		return (catalogue, catalogue.Tracks[2], new ExplainLab(catalogue));
+	}
+
+	[Fact]
+	public async Task BuildView_ReturnsASpectrogramPeaksAndPairsOnOneTimeline()
+	{
+		var (_, track, lab) = await ArrangeAsync();
+
+		var view = lab.BuildView(track, 4, 12);
+
+		view.Spectrogram.Bins.Should().Be(513);
+		view.Spectrogram.Frames.Should().BeGreaterThan(400);
+		view.Spectrogram.Image.Length.Should().Be(view.Spectrogram.Frames * 513);
+		view.Spectrogram.Image.Should().Contain((byte)255);
+		view.Peaks.Should().NotBeEmpty();
+		view.Peaks.Should().OnlyContain(p => p.Frame >= 0 && p.Frame < view.Spectrogram.Frames);
+		view.Pairs.Should().NotBeEmpty();
+		view.Pairs.All(p => p.DeltaFrames is >= 1 and <= 63).Should().BeTrue();
+		// Each pair's anchor is one of the peaks.
+		var anchors = view.Peaks.Select(p => ((long)p.Frame << 16) | (uint)p.Bin).ToHashSet();
+		view.Pairs.All(p => anchors.Contains(((long)p.AnchorFrame << 16) | (uint)p.AnchorBin)).Should().BeTrue();
+	}
+
+	[Fact]
+	public async Task BuildView_RejectsATrackWithoutAudio()
+	{
+		var (_, _, lab) = await ArrangeAsync();
+		var act = () => lab.BuildView(new CatalogueTrack("x", "x", "x", "x", 1, 1, null), 0, 12);
+		act.Should().Throw<ArgumentException>();
+		var clip = () => lab.RunClip(new CatalogueTrack("x", "x", "x", "x", 1, 1, null), 0, 0, 6);
+		clip.Should().Throw<ArgumentException>();
+	}
+
+	[Theory]
+	[InlineData(0)]
+	[InlineData(37)]
+	[InlineData(128)]
+	[InlineData(255)]
+	public async Task Clip_AtAnySubFramePhase_StillVotesForTheTrueOffsetWithinOneFrame(int shift)
+	{
+		var (_, track, lab) = await ArrangeAsync();
+
+		var trial = lab.RunClip(track, 9, shift, 6);
+
+		trial.ClipLandmarks.Should().BeGreaterThan(100);
+		trial.PeakVotes.Should().BeGreaterThan(20);
+		Math.Abs(trial.FoundOffsetFrames - trial.TrueOffsetFrames).Should().BeLessThanOrEqualTo(1.5);
+		trial.AtTrueOffset.Should().BeGreaterThanOrEqualTo(trial.PeakVotes - 5);
+		trial.PeakVotes.Should().BeGreaterThan((int)(trial.BackgroundVotes * 10));
+		trial.Histogram.Sum().Should().BeGreaterThanOrEqualTo(trial.PeakVotes);
+	}
+
+	[Fact]
+	public async Task Sweep_CoversEightPhasesAndEveryOneFindsTheSpike()
+	{
+		var (_, track, lab) = await ArrangeAsync();
+
+		var rows = lab.SweepPhases(track, 6, 6);
+
+		rows.Select(r => r.ShiftSamples).Should().Equal(0, 32, 64, 96, 128, 160, 192, 224);
+		rows.Should().OnlyContain(r => Math.Abs(r.FoundOffsetFrames - r.TrueOffsetFrames) <= 1.5 && r.PeakVotes > 20);
+	}
+
+	[Fact]
+	public async Task A_clip_of_silence_reports_no_votes()
+	{
+		var catalogue = new DemoCatalogue();
+		await catalogue.SeedAsync();
+		var silent = new CatalogueTrack("silent", "s", "s", "s", 40, 1, new float[DemoCatalogue.SampleRate * 40]);
+		var trial = new ExplainLab(catalogue).RunClip(silent, 2, 0, 6);
+		trial.PeakVotes.Should().Be(0);
+		trial.Histogram.Should().BeEmpty();
+		trial.BackgroundVotes.Should().Be(0);
+	}
+}

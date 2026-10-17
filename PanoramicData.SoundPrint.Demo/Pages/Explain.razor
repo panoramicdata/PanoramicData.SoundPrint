@@ -1,23 +1,32 @@
 @page "/explain"
 @implements IAsyncDisposable
 @inject DemoCatalogue Catalogue
+@inject ExplainLab Lab
 @inject IJSRuntime JS
 
 <h1>How it works</h1>
 <p class="lead">
-	Pick a catalogue track and watch it become a fingerprint, then see why a short clip finds its way home.
+	A fingerprint is a short list of numbers that survives noise, compression and a different start time, and still points back to one
+	recording. This page builds one, step by step, from real data. Everything is live: move the sliders, click the dots.
 </p>
 
 <SeedGate>
 
-<div class="row">
-	<select @bind="TrackId">
-		@foreach (var track in Catalogue.Tracks.Where(t => t.Samples is not null))
-		{
-			<option value="@track.Id">@track.Title</option>
-		}
-	</select>
-	<button @onclick="FingerprintAsync">Fingerprint the first @shownSeconds seconds</button>
+<div class="card">
+	<div class="row">
+		<label>Track&nbsp;
+			<select @bind="TrackId" @bind:after="RebuildAsync">
+				@foreach (var track in Catalogue.Tracks.Where(t => t.Samples is not null))
+				{
+					<option value="@track.Id">@track.Title</option>
+				}
+			</select>
+		</label>
+		<label>Show 12 s starting at <strong>@viewStart</strong> s
+			<input type="range" min="0" max="28" step="1" @bind="viewStart" @bind:event="oninput" @onchange="RebuildAsync" />
+		</label>
+	</div>
+	<p class="note">The tracks are generated music (no recordings are involved), but the analysis is exactly what runs on real audio.</p>
 </div>
 
 @if (error is not null)
@@ -25,84 +34,257 @@
 	<div class="card"><pre style="white-space:pre-wrap;color:var(--bad)">@error</pre></div>
 }
 
-<canvas id="explainCanvas" width="1000" height="320"></canvas>
-<p class="note">Blue dots are spectral peaks (time across, frequency up). Green lines join an anchor peak to its partner: each line becomes one landmark hash.</p>
+<h2>1. Sound as numbers</h2>
+<p>
+	A microphone measures air pressure thousands of times a second. The library resamples everything to <strong>11,025 samples per second</strong>,
+	so one second of music is a list <em>x</em><sub>0</sub>, <em>x</em><sub>1</sub>, &hellip;, <em>x</em><sub>11024</sub> of 11,025 numbers.
+	By the sampling theorem (Nyquist) a rate of <em>f</em><sub>s</sub> can represent frequencies up to <em>f</em><sub>s</sub>/2, here <strong>5,512 Hz</strong>,
+	which holds the notes, harmonics and consonants that identify a recording and leaves out the top octave that radio and codecs damage anyway.
+</p>
 
-@if (peakCount > 0)
+<h2>2. A spectrogram: how much of each frequency, when</h2>
+<p>
+	A single Fourier transform of a whole song would say <em>which</em> frequencies occur but not <em>when</em>. So we cut the signal into overlapping
+	windows of <em>N</em> = 1,024 samples (92.9 ms), multiply each by a Hann window <em>w</em><sub>n</sub> = &frac12;(1 &minus; cos(2&pi;<em>n</em>/<em>N</em>))
+	to avoid edge effects, and take the discrete Fourier transform:
+</p>
+<p class="formula">
+	X<sub>k</sub>(m) = &sum;<sub>n=0</sub><sup>N&minus;1</sup> w<sub>n</sub> &middot; x<sub>mH+n</sub> &middot; e<sup>&minus;2&pi;i&thinsp;kn/N</sup>,&emsp; power = |X<sub>k</sub>(m)|&sup2;
+</p>
+<p>
+	Frame <em>m</em> starts <em>H</em> = 256 samples (23.2 ms) after frame <em>m</em>&minus;1, so neighbouring windows overlap by 75%.
+	Bin <em>k</em> is the frequency <em>k</em>&middot;<em>f</em><sub>s</sub>/<em>N</em> = <em>k</em> &times; 10.77 Hz, so the frequency resolution is about 1/(window length):
+	a longer window sharpens frequency and blurs time, a shorter one the reverse (the Fourier uncertainty trade-off, &Delta;<em>f</em>&middot;&Delta;<em>t</em> of order 1).
+	The picture below is the power in decibels, brighter meaning louder.
+</p>
+
+<div class="row">
+	<label><input type="checkbox" @bind="showSpectrogram" @bind:after="RedrawAsync" /> spectrogram</label>
+	<label><input type="checkbox" @bind="showPeaks" @bind:after="RedrawAsync" /> peaks (step 3)</label>
+	<label><input type="checkbox" @bind="showPairs" @bind:after="RedrawAsync" /> landmark pairs (step 4)</label>
+	<span class="note">Click a blue dot to choose an anchor for step 4.</span>
+</div>
+<canvas id="explainCanvas" width="1000" height="440"></canvas>
+<p class="note">
+	Horizontal axis: time in the track (seconds). Vertical axis: frequency (kHz). Steady notes are horizontal bands with harmonics stacked above them;
+	drums are vertical smears; the dark gaps are rests.
+</p>
+
+<h2>3. Keep only the peaks</h2>
+<p>
+	A cell is a <strong>peak</strong> if its power is the largest in a neighbourhood of &plusmn;8 bins by &plusmn;3 frames (about &plusmn;86 Hz by &plusmn;70 ms), and above a small floor.
+	Why peaks? Suppose the recording is made louder, or its loudness is changed by any increasing function: if <em>a</em> &gt; <em>b</em> then <em>g</em>(<em>a</em>) &gt; <em>g</em>(<em>b</em>),
+	so <strong>every local maximum stays where it is</strong>. Noise adds a little to each cell, but a peak well above the noise floor stays the largest in its neighbourhood.
+	Quiet detail, which is what noise and compression destroy, is simply not used.
+</p>
+<p>
+	Two refinements keep the fingerprint useful. <strong>Band balancing</strong>: the spectrum is split into seven octave-like bands and each band keeps only its strongest
+	4 peaks per 0.74 s, so a loud bass line cannot crowd out the hi-hat. That also caps the amount of data: this view holds
+	<strong>@(view?.Peaks.Count ?? 0) peaks</strong> in 12 s, about @(view is null ? 0 : (view.Peaks.Count / 12.0).ToString("0")) per second.
+</p>
+
+<h2>4. Pair peaks into landmarks</h2>
+<p>
+	One peak says little: a note at 440 Hz appears in a thousand songs. A <em>pair</em> of peaks says much more. Take an <strong>anchor</strong> peak at (time <em>t</em><sub>1</sub>, frequency <em>f</em><sub>1</sub>),
+	look in the <strong>target zone</strong> after it (the yellow box: up to 63 frames, 1.46 s, ahead, and &plusmn;128 bins either side) and join it to up to 6 peaks
+	there. Each pair becomes one number built from three small ones:
+</p>
+<p class="formula">hash = ( f<sub>1</sub> : 9 bits ) ( f<sub>2</sub> &minus; f<sub>1</sub> + 128 : 8 bits ) ( t<sub>2</sub> &minus; t<sub>1</sub> : 6 bits )</p>
+<p>
+	The <strong>landmark</strong> is the hash plus <em>t</em><sub>1</sub>. Note what the hash leaves out: the absolute time. It contains only a frequency and two
+	<em>differences</em>, so it is <strong>unchanged if the whole clip is moved in time</strong>. That single property is what lets a clip that starts anywhere find its place (step 5).
+	Click a blue dot above to see its zone and the hashes it makes:
+</p>
+
+@if (anchor is not null)
 {
-	<div class="grid" style="margin-top:1rem">
-		<div class="card"><div class="stat">@peakCount</div><p>peaks kept in @shownSeconds s</p></div>
-		<div class="card"><div class="stat">@landmarkCount</div><p>landmarks (pairs) produced</p></div>
-		<div class="card"><div class="stat">@((landmarkCount / (double)shownSeconds).ToString("0"))</div><p>landmarks per second of audio</p></div>
+	<div class="card">
+		<p>
+			Anchor at <strong>@FrameSeconds(anchor.Value.Frame).ToString("0.00") s</strong>, bin @anchor.Value.Bin
+			(<strong>@HzOf(anchor.Value.Bin) Hz</strong>). @anchorPairs.Count pair@(anchorPairs.Count == 1 ? "" : "s") in its zone:
+		</p>
+		@if (anchorPairs.Count > 0)
+		{
+			<table>
+				<thead>
+					<tr><th>Partner</th><th>f<sub>1</sub> (9 bits)</th><th>&Delta;f + 128 (8 bits)</th><th>&Delta;t (6 bits)</th><th>32-bit hash</th></tr>
+				</thead>
+				<tbody>
+					@foreach (var pair in anchorPairs)
+					{
+						<tr>
+							<td>@FrameSeconds(pair.PartnerFrame).ToString("0.00") s, @HzOf(pair.PartnerBin) Hz</td>
+							<td class="mono">@Bits(pair.AnchorBin, 9) <span class="note">(@pair.AnchorBin)</span></td>
+							<td class="mono">@Bits(pair.DeltaBins + 128, 8) <span class="note">(@pair.DeltaBins)</span></td>
+							<td class="mono">@Bits(pair.DeltaFrames, 6) <span class="note">(@pair.DeltaFrames)</span></td>
+							<td class="mono">0x@(pair.Hash.ToString("X8"))</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		<p class="note">
+			The three fields sit side by side in the hash (the top 9 bits are spare). The &Delta;f field is stored with 128 added so that it is never negative.
+			Brackets show the plain value.
+		</p>
 	</div>
+}
 
-	<h2>A few landmarks</h2>
+<h2>5. Finding a clip: voting on the offset</h2>
+<p>
+	The database stores every track's landmarks as <code>hash &rarr; (track, <em>t</em><sub>1</sub>)</code>. A clip is fingerprinted the same way, and every one of its hashes is looked up.
+	A hit says: &ldquo;this clip landmark at clip-time <em>t</em><sub>c</sub> looks like that track landmark at track-time <em>t</em><sub>T</sub>&rdquo;, and therefore
+	<strong>if the clip really comes from this track, the clip started <em>t</em><sub>T</sub> &minus; <em>t</em><sub>c</sub> into it</strong>. Compute that <em>offset</em> for every hit
+	and make a histogram:
+</p>
+<ul>
+	<li>Genuine hits all come from the same moment, so they all give the <strong>same</strong> offset: a tall spike.</li>
+	<li>Coincidental hits (a similar pair of notes elsewhere in the track, or in another track) give offsets with no pattern: a low, spread-out floor.</li>
+</ul>
+<p>
+	So the question &ldquo;where in the track is this clip?&rdquo; becomes &ldquo;where is the spike?&rdquo;, and &ldquo;is it really this track?&rdquo; becomes &ldquo;how many times taller than the floor is the spike?&rdquo;.
+	That is what the matcher scores (using a Poisson model of the floor).
+</p>
+
+<div class="card">
+	<h3>Try it</h3>
+	<div class="row">
+		<label>Clip starts at <strong>@clipStart</strong> s
+			<input type="range" min="0" max="26" step="1" @bind="clipStart" @bind:event="oninput" @onchange="RunClipAsync" />
+		</label>
+		<label>plus <strong>@shift</strong> samples (<strong>@((shift * 1000.0 / DemoCatalogue.SampleRate).ToString("0.0")) ms</strong>, @((shift / 256.0).ToString("0.00")) of a frame)
+			<input type="range" min="0" max="255" step="1" @bind="shift" @bind:event="oninput" @onchange="RunClipAsync" />
+		</label>
+	</div>
+	<p class="note">The clip is 6 seconds long and is cut from the chosen track, then fingerprinted on <em>its own</em> frame grid.</p>
+</div>
+
+@if (trial is not null)
+{
+	<div class="hist-wrap">
+		<div class="hist">
+			@for (var i = 0; i < trial.Histogram.Count; i++)
+			{
+				var votes = trial.Histogram[i];
+				<div class="@(IsPeakBin(i) ? "peak" : "")" style="height:@(Math.Max(1, votes * 100 / Math.Max(1, trial.Histogram.Max())))%" title="offset @OffsetLabel(i): @votes votes"></div>
+			}
+		</div>
+		@if (trial.Histogram.Count > 0)
+		{
+			<div class="marker" style="left:@(MarkerPercent().ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%" title="true offset"></div>
+		}
+	</div>
+	<p class="note">
+		Horizontal axis: the offset (track time minus clip time), from @OffsetSeconds(trial.HistogramFirstFrame).ToString("0.0") s to
+		@OffsetSeconds(trial.HistogramFirstFrame + (trial.Histogram.Count * trial.HistogramBinFrames)).ToString("0.0") s. Vertical axis: number of hits (votes).
+		The white line is the true offset, @OffsetSeconds(trial.TrueOffsetFrames).ToString("0.000") s.
+	</p>
+	<div class="grid">
+		<div class="card"><div class="stat">@trial.ClipLandmarks</div><p>landmarks in the clip</p></div>
+		<div class="card"><div class="stat">@trial.PeakVotes</div><p>votes in the spike (offset @OffsetSeconds(trial.FoundOffsetFrames).ToString("0.000") s)</p></div>
+		<div class="card"><div class="stat">@(trial.BackgroundVotes < 0.05 ? "very many" : (trial.PeakVotes / trial.BackgroundVotes).ToString("0") + "x")</div><p>spike over the chance level (about @trial.BackgroundVotes.ToString("0.0") votes per window)</p></div>
+	</div>
+}
+
+<h2>6. The sampling-phase problem, and why it does not matter</h2>
+<p>
+	The track was analysed with frame boundaries at multiples of 256 samples from its start. A clip you record begins at some arbitrary sample, so its own frame grid is
+	shifted by a <strong>phase</strong> &phi; = (start sample) mod 256, anywhere from 0 to 23 ms. Two things could go wrong:
+</p>
+<ol>
+	<li>A peak that fell in frame <em>m</em> of the track might fall in frame <em>m</em>&plusmn;1 of the clip, so the time difference &Delta;<em>t</em> of a pair changes by one frame and the hash is <em>different</em>.</li>
+	<li>Offsets are measured in whole frames, but the true offset (start sample / 256) usually is not a whole number.</li>
+</ol>
+<p>The design handles both, and you can check it with the slider above or the sweep below:</p>
+<ul>
+	<li><strong>Overlap makes the spectrum change smoothly.</strong> Windows overlap by 75%, so moving the grid by &phi; &lt; 256 samples changes each frame's spectrum only slightly: it is a continuous function of the shift. A peak that is the local maximum in the track's frame is usually still a local maximum in the clip's nearest frame, because the neighbourhood is &plusmn;3 frames wide.</li>
+	<li><strong>Not every landmark has to survive.</strong> A clip has hundreds of landmarks and the vote needs only a few dozen to agree. The ones that flip a frame simply drop out of the spike (the sweep shows what share survives).</li>
+	<li><strong>The vote pools neighbouring offsets.</strong> The matcher adds the votes at offsets within &plusmn;1 frame, so landmarks that disagree by one frame about the offset still land in the same window.</li>
+	<li><strong>The cost is one frame of precision.</strong> The reported position is therefore correct to about a frame (23 ms): the fractional part &phi;/256 is not recovered.</li>
+</ul>
+
+<div class="row">
+	<button @onclick="SweepAsync" disabled="@sweeping">Sweep eight phases (0 to 224 samples)</button>
+	<span class="note">Same clip, shifted a little each time. Watch the spike stay where it should be.</span>
+</div>
+
+@if (sweep.Count > 0)
+{
 	<table>
-		<thead><tr><th>Anchor</th><th>Partner</th><th>Hash (32-bit)</th><th>What it encodes</th></tr></thead>
+		<thead>
+			<tr>
+				<th>Shift (samples)</th><th>Grid misalignment</th><th>Clip landmarks</th>
+				<th>At the true offset &plusmn;1 frame</th><th>Share</th><th>Spike votes</th><th>Spike at (s)</th><th>True offset (s)</th>
+			</tr>
+		</thead>
 		<tbody>
-			@foreach (var sample in samples)
+			@foreach (var row in sweep)
 			{
 				<tr>
-					<td>@sample.AnchorTime s, @sample.AnchorHz Hz</td>
-					<td>@sample.PartnerTime s, @sample.PartnerHz Hz</td>
-					<td class="mono">0x@(sample.Hash.ToString("X8"))</td>
-					<td class="note">anchor bin @sample.AnchorBin, &Delta;bin @sample.DeltaBin, &Delta;t @sample.DeltaFrames frames</td>
+					<td>@row.ShiftSamples</td>
+					<td>@Misalignment(row).ToString("0.00") of a frame</td>
+					<td>@row.ClipLandmarks</td>
+					<td>@row.AtTrueOffset</td>
+					<td>@((100.0 * row.AtTrueOffset / Math.Max(1, row.ClipLandmarks)).ToString("0"))%</td>
+					<td>@row.PeakVotes</td>
+					<td>@OffsetSeconds(row.FoundOffsetFrames).ToString("0.000")</td>
+					<td>@OffsetSeconds(row.TrueOffsetFrames).ToString("0.000")</td>
 				</tr>
 			}
 		</tbody>
 	</table>
-}
-
-<h2>Why a short clip finds its way home</h2>
-<p class="lead">
-	Take a clip, fingerprint it, and look up every hash. Each hit votes for the time offset between the clip and the track.
-	Coincidental hits scatter across offsets; the true match piles its votes onto one.
-</p>
-<div class="row">
-	<label>Clip starts at <strong>@clipStart</strong> s</label>
-	<input type="range" min="0" max="30" step="1" @bind="clipStart" @bind:event="oninput" />
-	<button class="secondary" @onclick="VoteAsync">Vote</button>
-</div>
-
-@if (histogram.Count > 0)
-{
-	<div class="hist">
-		@foreach (var bar in histogram)
-		{
-			<div class="@(bar.IsPeak ? "peak" : "")" style="height:@(bar.Height)%" title="offset @bar.Offset s: @bar.Votes votes"></div>
-		}
-	</div>
 	<p class="note">
-		Votes by offset for the chosen track (clip length 6 s). The tall green bar is at @bestOffset s with @bestVotes votes,
-		which is where the clip really starts. The other bars are chance.
+		<strong>Grid misalignment</strong> is how far the clip's frame boundaries sit from the track's, as a fraction of a frame (0 = lined up, 0.5 = as far out as possible).
+		The share of the clip's landmarks found at the true offset runs from <strong>@SweepShare(min: true)%</strong> (worst alignment) to <strong>@SweepShare(min: false)%</strong> (best):
+		that is the real cost of the phase problem, and it is why a clip needs a few hundred landmarks and not a handful. But the spike always sits within about one frame (0.023 s)
+		of the true offset and stays far above the chance level, so the clip is still found, at every phase.
 	</p>
 }
+
+<h2>7. How sure is it?</h2>
+<p>
+	If hits fell at random, the number in any one offset window would follow a Poisson distribution with a small mean &lambda; (the chance level above). The probability of seeing
+	<em>k</em> or more in one window is <em>P</em> = &sum;<sub><em>j</em>&ge;<em>k</em></sub> e<sup>&minus;&lambda;</sup>&lambda;<sup><em>j</em></sup>/<em>j</em>!, and the library reports the score
+	&minus;log<sub>10</sub> <em>P</em>. A score of 20 means &ldquo;one chance in 10<sup>20</sup> by coincidence&rdquo;. Real music is more repetitive than the model assumes, so the score is
+	calibrated against measured outcomes to give a confidence between 0 and 1.
+</p>
 
 </SeedGate>
 
 @code {
-	private const int shownSeconds = 12;
+	private const int ViewSeconds = 12;
+	private const int ClipSeconds = 6;
+
 	private IJSObjectReference? module;
+	private DotNetObjectReference<Explain>? self;
 	private string? trackId;
+	private string? error;
+	private int viewStart;
+	private bool showSpectrogram = true;
+	private bool showPeaks = true;
+	private bool showPairs = true;
+	private ExplainView? view;
+	private SpectralPeak? anchor;
+	private List<PairView> anchorPairs = [];
+	private int clipStart = 8;
+	private int shift;
+	private ClipTrial? trial;
+	private List<ClipTrial> sweep = [];
+	private bool sweeping;
+	private bool built;
+	private bool imageDirty = true;
+
+	/// <summary>When set in the address (explain?auto=true), runs the demonstrations on load, so the page can be linked to or captured.</summary>
+	[SupplyParameterFromQuery]
+	public bool Auto { get; set; }
 
 	private string? TrackId
 	{
 		get => trackId ?? Catalogue.Tracks.FirstOrDefault(t => t.Samples is not null)?.Id;
 		set => trackId = value;
 	}
-	private int clipStart = 8;
-	private int peakCount;
-	private int landmarkCount;
-	private double bestOffset;
-	private int bestVotes;
-	private List<SampleLandmark> samples = [];
-	private List<Bar> histogram = [];
-	private bool autoRan;
-	private string? error;
 
-	/// <summary>When set in the address (explain?auto=1), runs both demonstrations as soon as the catalogue is ready, so the page can be linked to or captured.</summary>
-	[SupplyParameterFromQuery]
-	public bool Auto { get; set; }
+	private CatalogueTrack? CurrentTrack => Catalogue.Find(TrackId ?? string.Empty);
 
 	protected override void OnInitialized() => Catalogue.Changed += OnCatalogueChanged;
 
@@ -110,149 +292,183 @@
 
 	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
-		if (Auto && !autoRan && Catalogue.Seeded)
+		if (built || !Catalogue.Seeded)
 		{
-			autoRan = true;
-			try
-			{
-				await FingerprintAsync();
-				await VoteAsync();
-			}
-			catch (Exception ex)
-			{
-				error = ex.ToString();
-			}
-
-			StateHasChanged();
+			return;
 		}
+
+		built = true;
+		try
+		{
+			self = DotNetObjectReference.Create(this);
+			await RebuildAsync();
+			await (await ModuleAsync()).InvokeVoidAsync("enablePeakPicking", "explainCanvas", self);
+			await RunClipAsync();
+			if (Auto)
+			{
+				await SweepAsync();
+			}
+		}
+		catch (Exception ex)
+		{
+			error = ex.ToString();
+		}
+
+		StateHasChanged();
 	}
 
 	private async Task<IJSObjectReference> ModuleAsync() => module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
 
-	private sealed class Collector : IPeakObserver
+	private async Task RebuildAsync()
 	{
-		public List<SpectralPeak> Peaks { get; } = [];
-		public void OnPeaks(ReadOnlySpan<SpectralPeak> peaks) => Peaks.AddRange(peaks);
+		if (CurrentTrack is not { } track)
+		{
+			return;
+		}
+
+		view = Lab.BuildView(track, viewStart, ViewSeconds);
+		imageDirty = true;
+		anchor = null;
+		anchorPairs = [];
+
+		// Start with an anchor that has several partners, so the zone and the table have something to show.
+		var busiest = view.Pairs.GroupBy(p => (p.AnchorFrame, p.AnchorBin)).OrderByDescending(g => g.Count()).FirstOrDefault();
+		if (busiest is not null)
+		{
+			anchor = view.Peaks.FirstOrDefault(p => p.Frame == busiest.Key.AnchorFrame && p.Bin == busiest.Key.AnchorBin);
+			SelectAnchorPairs();
+		}
+
+		await RedrawAsync();
 	}
 
-	private async Task FingerprintAsync()
+	private void SelectAnchorPairs() =>
+		anchorPairs = anchor is { } a && view is not null
+			? [.. view.Pairs.Where(p => p.AnchorFrame == a.Frame && p.AnchorBin == a.Bin).OrderBy(p => p.DeltaFrames)]
+			: [];
+
+	[JSInvokable]
+	public async Task OnPeakPicked(int index)
 	{
-		var track = Catalogue.Find(TrackId ?? string.Empty);
-		if (track?.Samples is null)
+		if (view is null || index < 0 || index >= view.Peaks.Count)
+		{
+			return;
+		}
+
+		anchor = view.Peaks[index];
+		SelectAnchorPairs();
+		await RedrawAsync();
+		StateHasChanged();
+	}
+
+	private async Task RedrawAsync()
+	{
+		if (view is null)
 		{
 			return;
 		}
 
 		var options = Catalogue.Options;
-		var audio = track.Samples.AsSpan(0, DemoCatalogue.SampleRate * shownSeconds).ToArray();
-		var collector = new Collector();
-		var fingerprinter = new Fingerprinter(DemoCatalogue.SampleRate, options) { PeakObserver = collector };
-		var sink = new ListLandmarkSink();
-		fingerprinter.Push(audio, sink);
-		fingerprinter.Flush(sink);
-
-		var landmarks = sink.Landmarks;
-		peakCount = collector.Peaks.Count;
-		landmarkCount = landmarks.Count;
-		var maxFrame = (int)(shownSeconds * 1000 / options.FrameDuration.TotalMilliseconds);
-
-		var peaks = new List<int>();
-		foreach (var p in collector.Peaks)
+		var spec = view.Spectrogram;
+		var stride = Math.Max(1, view.Pairs.Count / 90);
+		var figure = new
 		{
-			peaks.Add(p.Frame);
-			peaks.Add(p.Bin);
-		}
-
-		var pairs = new List<int>();
-		samples = [];
-		for (var i = 0; i < landmarks.Count; i += Math.Max(1, landmarks.Count / 60))
-		{
-			var l = landmarks[i];
-			var anchorBin = (int)((l.Hash >> 14) & 0x1FF);
-			var deltaBin = (int)((l.Hash >> 6) & 0xFF) - 128;
-			pairs.Add(l.AnchorFrame);
-			pairs.Add(anchorBin);
-			pairs.Add(l.AnchorFrame + l.DeltaFrames);
-			pairs.Add(anchorBin + deltaBin);
-			if (samples.Count < 6)
-			{
-				samples.Add(new SampleLandmark(
-					l.Hash,
-					anchorBin,
-					deltaBin,
-					l.DeltaFrames,
-					(l.AnchorFrame * options.FrameDuration.TotalSeconds).ToString("0.00"),
-					(anchorBin * (double)options.SampleRate / options.WindowSize).ToString("0"),
-					((l.AnchorFrame + l.DeltaFrames) * options.FrameDuration.TotalSeconds).ToString("0.00"),
-					((anchorBin + deltaBin) * (double)options.SampleRate / options.WindowSize).ToString("0")));
-			}
-		}
-
-		await (await ModuleAsync()).InvokeVoidAsync("drawConstellation", "explainCanvas", peaks, pairs, maxFrame, options.BinCount);
+			frames = spec.Frames,
+			bins = spec.Bins,
+			frameSeconds = options.FrameDuration.TotalSeconds,
+			hzPerBin = (double)options.SampleRate / options.WindowSize,
+			maxHz = options.SampleRate / 2,
+			startSeconds = view.StartSeconds,
+			image = imageDirty ? spec.Image : null,
+			peaks = view.Peaks.SelectMany(p => new[] { p.Frame, p.Bin }).ToArray(),
+			pairs = view.Pairs.Where((_, i) => i % stride == 0).SelectMany(p => new[] { p.AnchorFrame, p.AnchorBin, p.PartnerFrame, p.PartnerBin }).ToArray(),
+			zone = anchor is { } a ? new[] { a.Frame + 1, a.Bin - 128, a.Frame + options.MaxDeltaFrames, a.Bin + 127 } : null,
+			selectedPairs = anchorPairs.SelectMany(p => new[] { p.AnchorFrame, p.AnchorBin, p.PartnerFrame, p.PartnerBin }).ToArray(),
+			anchor = anchor is { } b ? new[] { b.Frame, b.Bin } : null,
+			showSpectrogram,
+			showPeaks,
+			showPairs
+		};
+		imageDirty = false;
+		await (await ModuleAsync()).InvokeVoidAsync("drawExplain", "explainCanvas", figure);
 	}
 
-	private sealed class OffsetCollector : IHitSink
+	private Task RunClipAsync()
 	{
-		public List<(int Track, int Offset)> Hits { get; } = [];
-		public void Add(int trackIndex, int trackFrame, Landmark queryLandmark) => Hits.Add((trackIndex, trackFrame - queryLandmark.AnchorFrame));
-	}
-
-	private Task VoteAsync()
-	{
-		var track = Catalogue.Find(TrackId ?? string.Empty);
-		if (track?.Samples is null)
+		if (CurrentTrack is { } track)
 		{
-			return Task.CompletedTask;
+			trial = Lab.RunClip(track, clipStart, shift, ClipSeconds);
 		}
 
-		var options = Catalogue.Options;
-		var clip = track.Samples.AsSpan(clipStart * DemoCatalogue.SampleRate, 6 * DemoCatalogue.SampleRate).ToArray();
-		var query = Fingerprinter.Fingerprint(clip, DemoCatalogue.SampleRate, options);
-		var collector = new OffsetCollector();
-		Catalogue.Store.Lookup(query, collector);
-
-		var indexes = collector.Hits.Select(h => h.Track).Distinct().ToList();
-		var ids = Catalogue.Store.ResolveTrackIds(indexes);
-		var wanted = indexes.Where(i => ids[indexes.IndexOf(i)] == track.Id).ToHashSet();
-		var offsets = collector.Hits.Where(h => wanted.Contains(h.Track)).Select(h => h.Offset).ToList();
-		if (offsets.Count == 0)
-		{
-			histogram = [];
-			return Task.CompletedTask;
-		}
-
-		var frameSeconds = options.FrameDuration.TotalSeconds;
-		var range = offsets.Max() - offsets.Min() + 1;
-		var binWidth = Math.Max(2, (int)Math.Ceiling(range / 140.0));
-		var min = offsets.Min() / binWidth;
-		var max = offsets.Max() / binWidth;
-		var counts = new int[max - min + 1];
-		foreach (var offset in offsets)
-		{
-			counts[(offset / binWidth) - min]++;
-		}
-
-		var top = counts.Max();
-		histogram = [.. counts.Select((votes, i) => new Bar(
-			Math.Max(1, votes * 100 / Math.Max(1, top)),
-			votes,
-			Math.Round(((i + min) * binWidth) * frameSeconds, 1),
-			votes == top))];
-		bestVotes = top;
-		bestOffset = histogram.First(b => b.IsPeak).Offset;
 		return Task.CompletedTask;
+	}
+
+	private async Task SweepAsync()
+	{
+		if (CurrentTrack is not { } track)
+		{
+			return;
+		}
+
+		sweeping = true;
+		StateHasChanged();
+		await Task.Yield();
+		sweep = [.. Lab.SweepPhases(track, clipStart, ClipSeconds)];
+		sweeping = false;
+	}
+
+	private double Misalignment(ClipTrial row)
+	{
+		var startSample = (clipStart * DemoCatalogue.SampleRate) + row.ShiftSamples;
+		var fraction = (startSample % ExplainLab.Hop) / (double)ExplainLab.Hop;
+		return Math.Min(fraction, 1 - fraction);
+	}
+
+	private string SweepShare(bool min)
+	{
+		var shares = sweep.Select(r => 100.0 * r.AtTrueOffset / Math.Max(1, r.ClipLandmarks));
+		return (min ? shares.Min() : shares.Max()).ToString("0");
+	}
+
+	private double FrameSeconds(int frame) => (view?.StartSeconds ?? 0) + (frame * Catalogue.Options.FrameDuration.TotalSeconds);
+
+	private string HzOf(int bin) => (bin * (double)Catalogue.Options.SampleRate / Catalogue.Options.WindowSize).ToString("0");
+
+	private static string Bits(int value, int width) => Convert.ToString(value, 2).PadLeft(width, '0');
+
+	private double OffsetSeconds(double frames) => frames * Catalogue.Options.FrameDuration.TotalSeconds;
+
+	private string OffsetLabel(int bin) => OffsetSeconds((trial?.HistogramFirstFrame ?? 0) + (bin * (trial?.HistogramBinFrames ?? 1))).ToString("0.00") + " s";
+
+	private bool IsPeakBin(int bin)
+	{
+		if (trial is null)
+		{
+			return false;
+		}
+
+		var from = trial.HistogramFirstFrame + (bin * trial.HistogramBinFrames);
+		return trial.FoundOffsetFrames >= from && trial.FoundOffsetFrames < from + trial.HistogramBinFrames;
+	}
+
+	private double MarkerPercent()
+	{
+		if (trial is null || trial.Histogram.Count == 0)
+		{
+			return 0;
+		}
+
+		var total = trial.Histogram.Count * trial.HistogramBinFrames;
+		return Math.Clamp((trial.TrueOffsetFrames - trial.HistogramFirstFrame) / total * 100, 0, 100);
 	}
 
 	public async ValueTask DisposeAsync()
 	{
 		Catalogue.Changed -= OnCatalogueChanged;
+		self?.Dispose();
 		if (module is not null)
 		{
 			await module.DisposeAsync();
 		}
 	}
-
-	private sealed record SampleLandmark(uint Hash, int AnchorBin, int DeltaBin, int DeltaFrames, string AnchorTime, string AnchorHz, string PartnerTime, string PartnerHz);
-
-	private sealed record Bar(int Height, int Votes, double Offset, bool IsPeak);
 }

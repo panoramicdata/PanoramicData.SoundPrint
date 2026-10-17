@@ -165,3 +165,146 @@ export function clearCanvas(canvasId) {
 export function createAudioUrl(bytes) {
 	return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// "How it works" figure: spectrogram heat map with labelled axes, peaks, landmark pairs and a selected anchor's target zone.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+const explainState = {};
+
+function decodeImage(value) {
+	if (typeof value !== 'string') { return Uint8Array.from(value); }
+	// Base64, possibly URL-safe and unpadded.
+	let s = value.replace(/-/g, '+').replace(/_/g, '/');
+	while (s.length % 4) { s += '='; }
+	return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+
+function heat(v) {
+	// A simple dark-to-bright colour ramp for a 0..255 value.
+	const t = v / 255;
+	const r = Math.min(255, Math.round(255 * Math.pow(t, 0.9) * 1.25));
+	const g = Math.min(255, Math.round(255 * Math.pow(t, 2.2) * 1.1));
+	const b = Math.min(255, Math.round(70 + 140 * Math.sin(Math.PI * Math.min(1, t * 1.2)) * (1 - t * 0.6)));
+	return [r, g, Math.max(0, t < 0.05 ? 20 : b)];
+}
+
+export function drawExplain(canvasId, o) {
+	const canvas = document.getElementById(canvasId);
+	if (!canvas) { return; }
+	const ctx = canvas.getContext('2d');
+	const W = canvas.width, H = canvas.height;
+	const L = 70, R = 12, T = 12, B = 44;           // margins: room for the axis labels
+	const pw = W - L - R, ph = H - T - B;
+	const previous = explainState[canvasId];
+	const image = o.image ? decodeImage(o.image) : (previous ? previous.image : null);
+	const x = (frame) => L + (frame / o.frames) * pw;
+	const y = (bin) => T + ph - (bin / (o.bins - 1)) * ph;
+	explainState[canvasId] = { o, x, y, L, T, pw, ph, image };
+
+	ctx.clearRect(0, 0, W, H);
+	ctx.fillStyle = '#0a0e18';
+	ctx.fillRect(0, 0, W, H);
+
+	if (o.showSpectrogram && image && image.length) {
+		const off = document.createElement('canvas');
+		off.width = o.frames; off.height = o.bins;
+		const octx = off.getContext('2d');
+		const img = octx.createImageData(o.frames, o.bins);
+		for (let f = 0; f < o.frames; f++) {
+			for (let k = 0; k < o.bins; k++) {
+				const v = image[f * o.bins + k];
+				const [r, g, b] = heat(v);
+				const p = ((o.bins - 1 - k) * o.frames + f) * 4;
+				img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = 255;
+			}
+		}
+		octx.putImageData(img, 0, 0);
+		ctx.imageSmoothingEnabled = true;
+		ctx.drawImage(off, L, T, pw, ph);
+	}
+
+	// Axes, ticks and gridlines.
+	ctx.strokeStyle = '#2a3552'; ctx.fillStyle = '#8f9bb8'; ctx.lineWidth = 1;
+	ctx.font = '12px "Segoe UI", sans-serif';
+	ctx.strokeRect(L, T, pw, ph);
+	const seconds = o.frames * o.frameSeconds;
+	for (let s = 0; s <= seconds + 1e-9; s += 1) {
+		const px = x(s / o.frameSeconds);
+		ctx.beginPath(); ctx.moveTo(px, T + ph); ctx.lineTo(px, T + ph + 5); ctx.stroke();
+		ctx.textAlign = 'center';
+		ctx.fillText((o.startSeconds + s).toFixed(0), px, T + ph + 18);
+	}
+	for (let hz = 0; hz <= o.maxHz + 1e-9; hz += 1000) {
+		const py = y(hz / o.hzPerBin);
+		ctx.beginPath(); ctx.moveTo(L - 5, py); ctx.lineTo(L, py); ctx.stroke();
+		ctx.textAlign = 'right';
+		ctx.fillText(hz === 0 ? '0' : (hz / 1000) + ' kHz', L - 8, py + 4);
+		if (hz > 0) { ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.beginPath(); ctx.moveTo(L, py); ctx.lineTo(L + pw, py); ctx.stroke(); ctx.strokeStyle = '#2a3552'; }
+	}
+	ctx.textAlign = 'center';
+	ctx.fillStyle = '#c9d3ea';
+	ctx.fillText('Time in the track (seconds)', L + pw / 2, H - 6);
+	ctx.save();
+	ctx.translate(14, T + ph / 2); ctx.rotate(-Math.PI / 2);
+	ctx.fillText('Frequency (Hz)', 0, 0);
+	ctx.restore();
+
+	// Landmark pairs.
+	if (o.showPairs) {
+		ctx.strokeStyle = 'rgba(124,240,178,0.55)'; ctx.lineWidth = 1;
+		for (let i = 0; i + 3 < o.pairs.length; i += 4) {
+			ctx.beginPath(); ctx.moveTo(x(o.pairs[i]), y(o.pairs[i + 1])); ctx.lineTo(x(o.pairs[i + 2]), y(o.pairs[i + 3])); ctx.stroke();
+		}
+	}
+
+	// Selected anchor: target zone rectangle and its pairs in a strong colour.
+	if (o.zone && o.zone.length === 4) {
+		const [f0, b0, f1, b1] = o.zone;
+		ctx.fillStyle = 'rgba(255,214,102,0.10)'; ctx.strokeStyle = 'rgba(255,214,102,0.9)'; ctx.lineWidth = 1.5;
+		const zx = x(f0), zy = y(Math.min(b1, o.bins - 1)), zw = x(f1) - x(f0), zh = y(Math.max(b0, 0)) - y(Math.min(b1, o.bins - 1));
+		ctx.fillRect(zx, zy, zw, zh); ctx.strokeRect(zx, zy, zw, zh);
+	}
+	if (o.selectedPairs) {
+		ctx.strokeStyle = '#ffd666'; ctx.lineWidth = 2;
+		for (let i = 0; i + 3 < o.selectedPairs.length; i += 4) {
+			ctx.beginPath(); ctx.moveTo(x(o.selectedPairs[i]), y(o.selectedPairs[i + 1])); ctx.lineTo(x(o.selectedPairs[i + 2]), y(o.selectedPairs[i + 3])); ctx.stroke();
+			ctx.fillStyle = '#ffd666'; ctx.beginPath(); ctx.arc(x(o.selectedPairs[i + 2]), y(o.selectedPairs[i + 3]), 4, 0, 7); ctx.fill();
+		}
+	}
+
+	// Peaks.
+	if (o.showPeaks) {
+		for (let i = 0; i + 1 < o.peaks.length; i += 2) {
+			ctx.fillStyle = '#4cc2ff'; ctx.strokeStyle = '#06202e'; ctx.lineWidth = 1;
+			ctx.beginPath(); ctx.arc(x(o.peaks[i]), y(o.peaks[i + 1]), 3, 0, 7); ctx.fill(); ctx.stroke();
+		}
+	}
+	if (o.anchor && o.anchor.length === 2) {
+		ctx.strokeStyle = '#ffd666'; ctx.lineWidth = 2; ctx.fillStyle = '#ffd666';
+		ctx.beginPath(); ctx.arc(x(o.anchor[0]), y(o.anchor[1]), 6, 0, 7); ctx.stroke();
+		ctx.beginPath(); ctx.arc(x(o.anchor[0]), y(o.anchor[1]), 2.5, 0, 7); ctx.fill();
+	}
+}
+
+// Lets a click on the figure choose the nearest peak; .NET is told the index into the peaks array last drawn.
+export function enablePeakPicking(canvasId, dotnetRef) {
+	const canvas = document.getElementById(canvasId);
+	if (!canvas) { return; }
+	if (canvas._pick) { canvas.removeEventListener('click', canvas._pick); }
+	canvas._pick = (e) => {
+		const s = explainState[canvasId];
+		if (!s) { return; }
+		const rect = canvas.getBoundingClientRect();
+		const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+		const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+		let best = -1, bestD = 18 * 18;
+		for (let i = 0; i + 1 < s.o.peaks.length; i += 2) {
+			const dx = s.x(s.o.peaks[i]) - px, dy = s.y(s.o.peaks[i + 1]) - py;
+			const d = dx * dx + dy * dy;
+			if (d < bestD) { bestD = d; best = i / 2; }
+		}
+		dotnetRef.invokeMethodAsync('OnPeakPicked', best);
+	};
+	canvas.addEventListener('click', canvas._pick);
+}
