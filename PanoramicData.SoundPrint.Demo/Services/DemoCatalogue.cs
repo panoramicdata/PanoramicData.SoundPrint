@@ -53,7 +53,8 @@ public sealed class DemoCatalogue
 	public long LandmarkCount => _tracks.Sum(t => (long)t.Landmarks);
 
 	// the platform sine is much faster than the bit-exact one in WebAssembly, and nothing here needs exact reproducibility
-	private static readonly SongStyle DemoStyle = new() { UsePlatformSine = true };
+	// the pad sits two octaves lower than it did originally, a low drone under the melody
+	private static readonly SongStyle DemoStyle = new() { UsePlatformSine = true, PadOctaveOffset = -1 };
 
 	/// <summary>Generates the starting catalogue of synthetic songs, yielding between songs so the page stays responsive.</summary>
 	public async Task SeedAsync(IProgress<(int Done, int Total)>? progress = null)
