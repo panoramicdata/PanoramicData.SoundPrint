@@ -14,11 +14,11 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+		<PackageReference Include="PanoramicData.MusicGeneration" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\PanoramicData.SoundPrint\PanoramicData.SoundPrint.csproj" />
-		<ProjectReference Include="..\PanoramicData.SoundPrint.SyntheticAudio\PanoramicData.SoundPrint.SyntheticAudio.csproj" />
 	</ItemGroup>
 
 </Project>

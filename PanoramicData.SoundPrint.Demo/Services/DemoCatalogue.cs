@@ -1,4 +1,4 @@
-using PanoramicData.SoundPrint.SyntheticAudio;
+using PanoramicData.MusicGeneration;
 
 namespace PanoramicData.SoundPrint.Demo.Services;
 
@@ -52,6 +52,9 @@ public sealed class DemoCatalogue
 	/// <summary>Total landmarks across tracks.</summary>
 	public long LandmarkCount => _tracks.Sum(t => (long)t.Landmarks);
 
+	// the platform sine is much faster than the bit-exact one in WebAssembly, and nothing here needs exact reproducibility
+	private static readonly SongStyle DemoStyle = new() { UsePlatformSine = true };
+
 	/// <summary>Generates the starting catalogue of synthetic songs, yielding between songs so the page stays responsive.</summary>
 	public async Task SeedAsync(IProgress<(int Done, int Total)>? progress = null)
 	{
@@ -65,7 +68,7 @@ public sealed class DemoCatalogue
 		{
 			await Task.Yield();
 			var seed = 4000 + i;
-			var samples = SyntheticSong.Generate(seed, 40, SampleRate);
+			var samples = SongGenerator.Generate(seed, 40, SampleRate, DemoStyle).Samples;
 			await AddCoreAsync($"Synthetic song {i + 1}", "SoundPrint test generator", "Generated in your browser", samples, SampleRate, keepSamples: true);
 			progress?.Report((i + 1, count));
 		}

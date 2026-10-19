@@ -1,6 +1,5 @@
 @page "/identify"
 @implements IAsyncDisposable
-@using PanoramicData.SoundPrint.SyntheticAudio
 @inject DemoCatalogue Catalogue
 @inject IdentifySession Session
 @inject IJSRuntime JS
@@ -190,7 +189,7 @@
 			return;
 		}
 
-		var wav = WavFile.ToBytes(track.Samples, DemoCatalogue.SampleRate);
+		var wav = PanoramicData.MusicGeneration.WavEncoder.Encode(track.Samples, DemoCatalogue.SampleRate);
 		audioUrl = await (await ModuleAsync()).InvokeAsync<string>("createAudioUrl", wav);
 	}
 
