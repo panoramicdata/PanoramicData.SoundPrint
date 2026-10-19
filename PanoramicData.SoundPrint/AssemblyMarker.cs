@@ -6,5 +6,5 @@ namespace PanoramicData.SoundPrint;
 public static class AssemblyMarker
 {
 	/// <summary>The package name.</summary>
-	public const string Name = "PanoramicData.SoundPrint";
+	public static string Name { get; } = "PanoramicData.SoundPrint";
 }
