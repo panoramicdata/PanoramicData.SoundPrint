@@ -56,6 +56,20 @@ public sealed class IdentifySession(DemoCatalogue catalogue) : IPeakObserver
 		}
 	}
 
+	/// <summary>The live spectrum feeding the display, or null before any audio.</summary>
+	public LiveSpectrum? Spectrum { get; private set; }
+
+	/// <summary>The landmarks in the current window, as pairs of peaks with their times and frequencies, for drawing.</summary>
+	public IReadOnlyList<(int AnchorFrame, int AnchorBin, int PartnerFrame, int PartnerBin)> RecentLandmarks =>
+		_window is null
+			? []
+			: [.. _window.Snapshot().Select(l =>
+			{
+				var bin = (int)((l.Hash >> 14) & 0x1FF);
+				var deltaBins = (int)((l.Hash >> 6) & 0xFF) - 128;
+				return (l.AnchorFrame, bin, l.AnchorFrame + l.DeltaFrames, bin + deltaBins);
+			})];
+
 	/// <inheritdoc />
 	public void OnPeaks(ReadOnlySpan<SpectralPeak> peaks) => _peaks.AddRange(peaks);
 
@@ -63,6 +77,7 @@ public sealed class IdentifySession(DemoCatalogue catalogue) : IPeakObserver
 	public void Reset()
 	{
 		_fingerprinter = null;
+		Spectrum = null;
 		_window = null;
 		_peaks.Clear();
 		_history.Clear();
@@ -82,6 +97,7 @@ public sealed class IdentifySession(DemoCatalogue catalogue) : IPeakObserver
 			_rate = sampleRate;
 			_fingerprinter = new Fingerprinter(sampleRate, catalogue.Options) { PeakObserver = this };
 			_window = new RollingLandmarkWindow(TimeSpan.FromSeconds(WindowSeconds), catalogue.Options);
+			Spectrum = new LiveSpectrum(catalogue.Options.WindowSize, catalogue.Options.HopSize, catalogue.Options.SampleRate, sampleRate);
 		}
 
 		var samples = new float[pcm.Length / 2];
@@ -91,6 +107,7 @@ public sealed class IdentifySession(DemoCatalogue catalogue) : IPeakObserver
 		}
 
 		_fingerprinter.Push(samples, _window!);
+		Spectrum!.Push(samples);
 		HeardSeconds += (double)samples.Length / sampleRate;
 
 		if (!_matching && HeardSeconds - _lastMatchAt >= MatchIntervalSeconds && _window!.Count > 0)

@@ -88,9 +88,18 @@
 </div>
 
 <h2>What it hears</h2>
-<p class="note">Left to right is time (last twelve seconds); bottom to top is frequency. Each dot is a spectral peak that survived band balancing: the raw material of the fingerprint.</p>
-<canvas id="spectrum" width="1000" height="160" style="@(listening ? "" : "display:none")"></canvas>
-<canvas id="constellation" width="1000" height="260"></canvas>
+<p class="note">Left to right is time (the last twelve seconds, sliding); bottom to top is frequency, up to half the sample rate. The picture is the sound itself. Each blue dot is a spectral peak that survived band balancing, and each green line joins two peaks into a landmark: together they are the fingerprint that gets looked up.</p>
+<PDMediaPlayer @ref="player"
+			   Title="Live spectrogram, spectral peaks and landmarks"
+			   ShowControls="false"
+			   ShowSpectrogram="true"
+			   ShowKeyPoints="true"
+			   ShowLandmarks="true"
+			   KeyPoints="keyPoints"
+			   Landmarks="landmarks"
+			   SpectrogramWindow="TimeSpan.FromSeconds(12)"
+			   SpectrogramMaxFrequency="@(DemoCatalogue.SampleRate / 2.0)"
+			   SpectrogramHeight="360" />
 
 <h2>Heard so far</h2>
 <div class="timeline">
@@ -117,6 +126,9 @@
 	private string? error;
 	private string? fileStatus;
 	private string? playId;
+	private PDMediaPlayer? player;
+	private IReadOnlyList<PDMediaKeyPoint> keyPoints = [];
+	private IReadOnlyList<PDMediaLandmark> landmarks = [];
 
 	private string? PlayId
 	{
@@ -140,8 +152,8 @@
 		try
 		{
 			self ??= DotNetObjectReference.Create(this);
-			Session.Reset();
-			await (await ModuleAsync()).InvokeAsync<double>("startMic", self, "spectrum");
+			await ClearDisplayAsync();
+			await (await ModuleAsync()).InvokeAsync<double>("startMic", self, null);
 			listening = true;
 		}
 		catch (JSException ex)
@@ -156,10 +168,17 @@
 		listening = false;
 	}
 
-	private async Task ResetAsync()
+	private async Task ResetAsync() => await ClearDisplayAsync();
+
+	private async Task ClearDisplayAsync()
 	{
 		Session.Reset();
-		await (await ModuleAsync()).InvokeVoidAsync("clearCanvas", "constellation");
+		keyPoints = [];
+		landmarks = [];
+		if (player is not null)
+		{
+			await player.ClearSpectrumAsync();
+		}
 	}
 
 	private async Task OnFileChosen(InputFileChangeEventArgs args)
@@ -168,7 +187,7 @@
 		try
 		{
 			self ??= DotNetObjectReference.Create(this);
-			Session.Reset();
+			await ClearDisplayAsync();
 			fileStatus = "Decoding and listening...";
 			StateHasChanged();
 			var info = await (await ModuleAsync()).InvokeAsync<FileInfo?>("streamFile", "identifyFile", self);
@@ -199,22 +218,41 @@
 	private void OnSessionChanged() => _ = InvokeAsync(async () =>
 	{
 		StateHasChanged();
-		if ((DateTime.UtcNow - lastDraw).TotalMilliseconds < 300)
+		if ((DateTime.UtcNow - lastDraw).TotalMilliseconds < 120)
 		{
 			return;
 		}
 
 		lastDraw = DateTime.UtcNow;
-		var cutoff = Session.LatestFrame - Session.WindowFrames;
-		var flat = new List<int>();
-		foreach (var peak in Session.RecentPeaks)
+		await UpdateDisplayAsync();
+	});
+
+	private async Task UpdateDisplayAsync()
+	{
+		if (player is null || Session.Spectrum is not { } spectrum)
 		{
-			flat.Add(peak.Frame - cutoff);
-			flat.Add(peak.Bin);
+			return;
 		}
 
-		await (await ModuleAsync()).InvokeVoidAsync("drawConstellation", "constellation", flat, Array.Empty<int>(), Session.WindowFrames, Catalogue.Options.BinCount);
-	});
+		var options = Session.Options;
+		TimeSpan TimeOf(int frame) => options.FramesToTime(frame);
+		double HzOf(int bin) => (double)bin * options.SampleRate / options.WindowSize;
+		keyPoints = [.. Session.RecentPeaks.Select(p => new PDMediaKeyPoint { Time = TimeOf(p.Frame), FrequencyHz = HzOf(p.Bin), Weight = 0.4 })];
+		landmarks = [.. Session.RecentLandmarks.Select(l => new PDMediaLandmark
+		{
+			FromTime = TimeOf(l.AnchorFrame),
+			FromFrequencyHz = HzOf(l.AnchorBin),
+			ToTime = TimeOf(l.PartnerFrame),
+			ToFrequencyHz = HzOf(l.PartnerBin)
+		})];
+		var levels = spectrum.Take();
+		if (levels.Length > 0)
+		{
+			await player.PushSpectrumAsync(levels, spectrum.Bins, spectrum.ColumnDuration);
+		}
+
+		StateHasChanged();
+	}
 
 	private static string Format(TimeSpan t)
 	{

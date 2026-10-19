@@ -20,6 +20,23 @@ public static class SpectrogramMaker
 	/// <returns>The spectrogram.</returns>
 	public static Spectrogram Compute(ReadOnlySpan<float> samples, int window, int hop)
 	{
+		var (power, frames, bins, maxDb) = Decibels(samples, window, hop);
+		var image = new byte[power.Length];
+		for (var i = 0; i < power.Length; i++)
+		{
+			image[i] = (byte)Math.Clamp((power[i] - (maxDb - 80)) / 80 * 255, 0, 255);
+		}
+
+		return new Spectrogram(frames, bins, image, maxDb);
+	}
+
+	/// <summary>Computes the power in decibels of every cell, frame-major, with the same window and hop as <see cref="Compute"/>.</summary>
+	/// <param name="samples">Mono samples.</param>
+	/// <param name="window">Window length in samples; a power of two.</param>
+	/// <param name="hop">Samples between window starts.</param>
+	/// <returns>The decibel values, the number of frames and bins, and the loudest value.</returns>
+	public static (double[] Power, int Frames, int Bins, double MaxDecibels) Decibels(ReadOnlySpan<float> samples, int window, int hop)
+	{
 		var frames = Math.Max(0, ((samples.Length - window) / hop) + 1);
 		var bins = (window / 2) + 1;
 		var power = new double[frames * bins];
@@ -49,13 +66,7 @@ public static class SpectrogramMaker
 			}
 		}
 
-		var image = new byte[power.Length];
-		for (var i = 0; i < power.Length; i++)
-		{
-			image[i] = (byte)Math.Clamp((power[i] - (maxDb - 80)) / 80 * 255, 0, 255);
-		}
-
-		return new Spectrogram(frames, bins, image, maxDb);
+		return (power, frames, bins, maxDb);
 	}
 
 	/// <summary>In-place radix-2 FFT.</summary>
