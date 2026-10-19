@@ -381,22 +381,38 @@ public sealed class Fingerprinter : IFingerprinter
 		var taken = 0;
 		for (var j = anchorIndex + 1; j < _peaks.Count && taken < _options.FanOut; j++)
 		{
-			var partner = _peaks[j];
-			var deltaFrames = partner.Frame - anchor.Frame;
-			if (deltaFrames > _options.MaxDeltaFrames)
+			if (TakeNextPair(anchor, _peaks[j]))
+			{
+				taken++;
+			}
+			else if (ExhaustedPartner(_peaks[j].Frame, anchor.Frame))
 			{
 				break;
 			}
-
-			var deltaBins = partner.Bin - anchor.Bin;
-			if (deltaFrames < 1 || deltaBins is < -128 or > 127)
-			{
-				continue;
-			}
-
-			AddLandmark(new Landmark(((uint)anchor.Bin << 14) | ((uint)(deltaBins + 128) << 6) | (uint)deltaFrames, anchor.Frame));
-			taken++;
 		}
+	}
+
+	private bool TakeNextPair(Peak anchor, Peak partner)
+	{
+		var deltaFrames = partner.Frame - anchor.Frame;
+		if (deltaFrames > _options.MaxDeltaFrames)
+		{
+			return false;
+		}
+
+		var deltaBins = partner.Bin - anchor.Bin;
+		if (deltaFrames < 1 || deltaBins is < -128 or > 127)
+		{
+			return false;
+		}
+
+		AddLandmark(new Landmark(((uint)anchor.Bin << 14) | ((uint)(deltaBins + 128) << 6) | (uint)deltaFrames, anchor.Frame));
+		return true;
+	}
+
+	private bool ExhaustedPartner(long partnerFrame, long anchorFrame)
+	{
+		return partnerFrame - anchorFrame > _options.MaxDeltaFrames;
 	}
 
 	private void AddLandmark(Landmark landmark)
