@@ -1,0 +1,52 @@
+<PDMediaPlayer @ref="player"
+			   Title="@Title"
+			   ShowControls="false"
+			   ShowSpectrogram="true"
+			   ShowKeyPoints="true"
+			   ShowLandmarks="true"
+			   SpectrogramWindow="TimeSpan.FromSeconds(WindowSeconds)"
+			   SpectrogramMaxFrequency="MaxFrequency"
+			   SpectrogramHeight="360" />
+
+@code {
+	private PDMediaPlayer? player;
+
+	[Parameter]
+	public string? Title { get; set; }
+
+	[Parameter]
+	public int WindowSeconds { get; set; } = 12;
+
+	[Parameter]
+	public double MaxFrequency { get; set; } = DemoCatalogue.SampleRate / 2.0;
+
+	// the player is drawn once; everything after that goes straight to the browser, because a live feed changes many times a second
+	// and rendering the component (or the page around it) each time would cost far more than the drawing
+	protected override bool ShouldRender() => player is null;
+
+	/// <summary>Appends spectrum columns and replaces the peaks and landmarks, without rendering.</summary>
+	public async Task UpdateAsync(byte[] levels, int bins, TimeSpan columnDuration, IReadOnlyList<PDMediaKeyPoint> keyPoints, IReadOnlyList<PDMediaLandmark> landmarks)
+	{
+		if (player is null)
+		{
+			return;
+		}
+
+		if (levels.Length > 0)
+		{
+			await player.PushSpectrumAsync(levels, bins, columnDuration);
+		}
+
+		await player.SetVisualisationDataAsync(keyPoints, landmarks);
+	}
+
+	/// <summary>Clears everything shown.</summary>
+	public async Task ClearAsync()
+	{
+		if (player is not null)
+		{
+			await player.ClearSpectrumAsync();
+			await player.SetVisualisationDataAsync(null, null);
+		}
+	}
+}

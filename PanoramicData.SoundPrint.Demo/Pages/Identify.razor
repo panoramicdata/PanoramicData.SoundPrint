@@ -89,17 +89,7 @@
 
 <h2>What it hears</h2>
 <p class="note">Left to right is time (the last twelve seconds, sliding); bottom to top is frequency, up to half the sample rate. The picture is the sound itself. Each blue dot is a spectral peak that survived band balancing, and each green line joins two peaks into a landmark: together they are the fingerprint that gets looked up.</p>
-<PDMediaPlayer @ref="player"
-			   Title="Live spectrogram, spectral peaks and landmarks"
-			   ShowControls="false"
-			   ShowSpectrogram="true"
-			   ShowKeyPoints="true"
-			   ShowLandmarks="true"
-			   KeyPoints="keyPoints"
-			   Landmarks="landmarks"
-			   SpectrogramWindow="TimeSpan.FromSeconds(12)"
-			   SpectrogramMaxFrequency="@(DemoCatalogue.SampleRate / 2.0)"
-			   SpectrogramHeight="360" />
+<LiveSpectrogram @ref="display" Title="Live spectrogram, spectral peaks and landmarks" />
 
 <h2>Heard so far</h2>
 <div class="timeline">
@@ -126,7 +116,7 @@
 	private string? error;
 	private string? fileStatus;
 	private string? playId;
-	private PDMediaPlayer? player;
+	private LiveSpectrogram? display;
 	private IReadOnlyList<PDMediaKeyPoint> keyPoints = [];
 	private IReadOnlyList<PDMediaLandmark> landmarks = [];
 
@@ -137,6 +127,8 @@
 	}
 	private string? audioUrl;
 	private DateTime lastDraw = DateTime.MinValue;
+	private DateTime lastOverlay = DateTime.MinValue;
+	private DateTime lastText = DateTime.MinValue;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -175,9 +167,9 @@
 		Session.Reset();
 		keyPoints = [];
 		landmarks = [];
-		if (player is not null)
+		if (display is not null)
 		{
-			await player.ClearSpectrumAsync();
+			await display.ClearAsync();
 		}
 	}
 
@@ -215,43 +207,50 @@
 	[JSInvokable]
 	public Task PushAudio(byte[] pcm, int sampleRate) => Session.PushPcmAsync(pcm, sampleRate);
 
+	// The page text (best match, history) changes a few times a second at most, the spectrum columns arrive about ten times a second
+	// and the peaks and landmarks are refreshed four times a second. Rendering the page on every chunk of audio is what made the live
+	// view fall behind, so the three are decoupled.
 	private void OnSessionChanged() => _ = InvokeAsync(async () =>
 	{
-		StateHasChanged();
-		if ((DateTime.UtcNow - lastDraw).TotalMilliseconds < 120)
+		var now = DateTime.UtcNow;
+		if ((now - lastText).TotalMilliseconds >= 400)
 		{
-			return;
+			lastText = now;
+			StateHasChanged();
 		}
 
-		lastDraw = DateTime.UtcNow;
-		await UpdateDisplayAsync();
+		if ((now - lastDraw).TotalMilliseconds >= 100)
+		{
+			lastDraw = now;
+			await UpdateDisplayAsync();
+		}
 	});
 
 	private async Task UpdateDisplayAsync()
 	{
-		if (player is null || Session.Spectrum is not { } spectrum)
+		if (display is null || Session.Spectrum is not { } spectrum)
 		{
 			return;
 		}
 
-		var options = Session.Options;
-		TimeSpan TimeOf(int frame) => options.FramesToTime(frame);
-		double HzOf(int bin) => (double)bin * options.SampleRate / options.WindowSize;
-		keyPoints = [.. Session.RecentPeaks.Select(p => new PDMediaKeyPoint { Time = TimeOf(p.Frame), FrequencyHz = HzOf(p.Bin), Weight = 0.4 })];
-		landmarks = [.. Session.RecentLandmarks.Select(l => new PDMediaLandmark
+		var now = DateTime.UtcNow;
+		if ((now - lastOverlay).TotalMilliseconds >= 250)
 		{
-			FromTime = TimeOf(l.AnchorFrame),
-			FromFrequencyHz = HzOf(l.AnchorBin),
-			ToTime = TimeOf(l.PartnerFrame),
-			ToFrequencyHz = HzOf(l.PartnerBin)
-		})];
-		var levels = spectrum.Take();
-		if (levels.Length > 0)
-		{
-			await player.PushSpectrumAsync(levels, spectrum.Bins, spectrum.ColumnDuration);
+			lastOverlay = now;
+			var options = Session.Options;
+			TimeSpan TimeOf(int frame) => options.FramesToTime(frame);
+			double HzOf(int bin) => (double)bin * options.SampleRate / options.WindowSize;
+			keyPoints = [.. Session.RecentPeaks.Select(p => new PDMediaKeyPoint { Time = TimeOf(p.Frame), FrequencyHz = HzOf(p.Bin), Weight = 0.4 })];
+			landmarks = [.. Session.RecentLandmarks.Select(l => new PDMediaLandmark
+			{
+				FromTime = TimeOf(l.AnchorFrame),
+				FromFrequencyHz = HzOf(l.AnchorBin),
+				ToTime = TimeOf(l.PartnerFrame),
+				ToFrequencyHz = HzOf(l.PartnerBin)
+			})];
 		}
 
-		StateHasChanged();
+		await display.UpdateAsync(spectrum.Take(), spectrum.Bins, spectrum.ColumnDuration, keyPoints, landmarks);
 	}
 
 	private static string Format(TimeSpan t)
