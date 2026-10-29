@@ -10,7 +10,7 @@
 		<PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.13" />
 		<PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.13" />
 		<PackageVersion Include="PanoramicData.Blazor" Version="10.0.385" />
-		<PackageVersion Include="PanoramicData.MusicGeneration" Version="0.1.19" />
+		<PackageVersion Include="PanoramicData.MusicGeneration" Version="0.1.33" />
 		<PackageVersion Include="Nerdbank.GitVersioning" Version="3.10.94" />
 		<PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
 		<!-- Test projects -->
