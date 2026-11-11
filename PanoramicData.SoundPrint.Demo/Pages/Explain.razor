@@ -317,7 +317,18 @@
 		StateHasChanged();
 	}
 
-	private async Task<IJSObjectReference> ModuleAsync() => module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+	private async Task<IJSObjectReference> ModuleAsync()
+	{
+		try
+		{
+			return module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+		}
+		catch (JSDisconnectedException)
+		{
+			// Callers decide what a closed circuit means for them.
+			throw;
+		}
+	}
 
 	private async Task RebuildAsync()
 	{
@@ -390,7 +401,14 @@
 			showPairs
 		};
 		imageDirty = false;
-		await (await ModuleAsync()).InvokeVoidAsync("drawExplain", "explainCanvas", figure);
+		try
+		{
+			await (await ModuleAsync()).InvokeVoidAsync("drawExplain", "explainCanvas", figure);
+		}
+		catch (JSDisconnectedException)
+		{
+			// The circuit is gone, so there is no canvas to draw on.
+		}
 	}
 
 	private Task RunClipAsync()
@@ -411,7 +429,6 @@
 		}
 
 		sweeping = true;
-		StateHasChanged();
 		await Task.Yield();
 		sweep = [.. Lab.SweepPhases(track, clipStart, ClipSeconds)];
 		sweeping = false;

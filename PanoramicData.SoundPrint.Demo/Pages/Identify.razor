@@ -136,7 +136,18 @@
 		await Task.CompletedTask;
 	}
 
-	private async Task<IJSObjectReference> ModuleAsync() => module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+	private async Task<IJSObjectReference> ModuleAsync()
+	{
+		try
+		{
+			return module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio.js");
+		}
+		catch (JSDisconnectedException)
+		{
+			// Callers decide what a closed circuit means for them.
+			throw;
+		}
+	}
 
 	private async Task StartAsync()
 	{
@@ -156,7 +167,14 @@
 
 	private async Task StopAsync()
 	{
-		await (await ModuleAsync()).InvokeVoidAsync("stopMic");
+		try
+		{
+			await (await ModuleAsync()).InvokeVoidAsync("stopMic");
+		}
+		catch (JSDisconnectedException)
+		{
+			// The circuit is gone, so the microphone is already released.
+		}
 		listening = false;
 	}
 
@@ -201,7 +219,14 @@
 		}
 
 		var wav = PanoramicData.MusicGeneration.WavEncoder.Encode(track.Samples, DemoCatalogue.SampleRate);
-		audioUrl = await (await ModuleAsync()).InvokeAsync<string>("createAudioUrl", wav);
+		try
+		{
+			audioUrl = await (await ModuleAsync()).InvokeAsync<string>("createAudioUrl", wav);
+		}
+		catch (JSDisconnectedException)
+		{
+			// The circuit is gone, so there is no player left to give the audio to.
+		}
 	}
 
 	[JSInvokable]
