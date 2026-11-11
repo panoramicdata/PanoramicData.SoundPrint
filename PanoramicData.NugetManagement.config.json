@@ -1,0 +1,7 @@
+{
+	"heldPackages": {
+		"Microsoft.EntityFrameworkCore": "Npgsql.EntityFrameworkCore.PostgreSQL 10.x supports EF Core 10 only; move all EF Core packages together when the provider supports 11.",
+		"Microsoft.EntityFrameworkCore.Design": "Npgsql.EntityFrameworkCore.PostgreSQL 10.x supports EF Core 10 only; move all EF Core packages together when the provider supports 11.",
+		"Microsoft.EntityFrameworkCore.Relational": "Npgsql.EntityFrameworkCore.PostgreSQL 10.x supports EF Core 10 only; move all EF Core packages together when the provider supports 11."
+	}
+}
