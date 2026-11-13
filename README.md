@@ -2,12 +2,14 @@
 
 [![NuGet](https://img.shields.io/nuget/v/PanoramicData.SoundPrint.svg)](https://www.nuget.org/packages/PanoramicData.SoundPrint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
+[![.NET 11.0](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![CI](https://github.com/panoramicdata/PanoramicData.SoundPrint/actions/workflows/ci.yml/badge.svg)](https://github.com/panoramicdata/PanoramicData.SoundPrint/actions/workflows/ci.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard)
 
 Landmark-based audio fingerprinting for .NET: build, store and query fingerprint databases from broadcast audio.
+
+Supports .NET 11.0.
 
 Give it a few seconds of sound and it tells you **which known track it is, where in the track it is, how sure it is, and where one song ends and the next begins**. It is built for continuous streams (a radio station recorded around the clock) but works equally for single clips.
 
@@ -30,7 +32,7 @@ dotnet add package PanoramicData.SoundPrint            # core library, no databa
 dotnet add package PanoramicData.SoundPrint.Postgres   # optional PostgreSQL store (EF Core)
 ```
 
-Targets .NET 10. Current release: 1.0.1.
+Targets .NET 11.0. Current release: 1.0.1.
 
 | Package | Purpose |
 |---|---|
