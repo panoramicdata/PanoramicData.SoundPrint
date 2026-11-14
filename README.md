@@ -7,6 +7,8 @@
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard)
 
+> **Need help with APIs or .NET?** Panoramic Data are experts in APIs and .NET, and we can help with your development. [Contact us](https://www.panoramicdata.com/contact-us) or see our [software services](https://www.panoramicdata.com/services/software).
+
 Landmark-based audio fingerprinting for .NET: build, store and query fingerprint databases from broadcast audio.
 
 Supports .NET 11.0.
