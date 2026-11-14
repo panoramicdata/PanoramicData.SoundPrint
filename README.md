@@ -2,7 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/PanoramicData.SoundPrint.svg)](https://www.nuget.org/packages/PanoramicData.SoundPrint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET 11.0](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
+[![.NET 11.0](https://img.shields.io/badge/.NET-11.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![CI](https://github.com/panoramicdata/PanoramicData.SoundPrint/actions/workflows/ci.yml/badge.svg)](https://github.com/panoramicdata/PanoramicData.SoundPrint/actions/workflows/ci.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/8672c1a1685745cc9b9b3986b2b49109)](https://app.codacy.com/gh/panoramicdata/PanoramicData.SoundPrint/dashboard)
